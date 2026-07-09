@@ -365,6 +365,6 @@ final class MusicBrainzApi
             }
         }
 
-        $this->lastRequestTime = microtime(true) * 1000;
+        $this->lastRequestTime = (int)(microtime(true) * 1000);
     }
 }
