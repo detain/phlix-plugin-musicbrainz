@@ -1,0 +1,48 @@
+{
+    "name": "phlix-plugin-musicbrainz",
+    "version": "0.1.0",
+    "phlix_min_server_version": "0.14.0",
+    "type": "metadata",
+    "entry": "Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin",
+    "events": [
+        "phlix.media.metadata_enrich",
+        "phlix.library.scan_complete"
+    ],
+    "settings": {
+        "enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable MusicBrainz metadata enrichment"
+        },
+        "user_agent": {
+            "type": "string",
+            "default": "PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
+            "description": "MusicBrainz API user agent (must be a valid contact email)"
+        },
+        "rate_limit_delay": {
+            "type": "integer",
+            "default": 1100,
+            "description": "Minimum milliseconds between MusicBrainz API requests (respect their 1 req/s limit)"
+        },
+        "auto_enrich": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically enrich music items during library scans"
+        },
+        "fetch_album_art": {
+            "type": "boolean",
+            "default": true,
+            "description": "Fetch album artwork from Cover Art Archive"
+        },
+        "fetch_acoustid": {
+            "type": "boolean",
+            "default": true,
+            "description": "Calculate and fetch AcoustID fingerprints"
+        },
+        "search_depth": {
+            "type": "string",
+            "default": "normal",
+            "description": "Search depth: 'fast' (title match only), 'normal' (title + artist), 'deep' (all metadata)"
+        }
+    }
+}
