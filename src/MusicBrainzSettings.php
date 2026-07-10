@@ -21,9 +21,13 @@ namespace Phlix\Plugin\MusicBrainz;
  */
 final class MusicBrainzSettings
 {
+    /** Default MusicBrainz API user agent. */
+    private const DEFAULT_USER_AGENT =
+        'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)';
+
     public function __construct(
         public readonly bool $enabled = false,
-        public readonly string $userAgent = 'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)',
+        public readonly string $userAgent = self::DEFAULT_USER_AGENT,
         public readonly int $rateLimitDelay = 1100,
         public readonly bool $autoEnrich = true,
         public readonly bool $fetchAlbumArt = true,
@@ -45,14 +49,15 @@ final class MusicBrainzSettings
             enabled: (bool)($data['enabled'] ?? false),
             userAgent: is_string($data['user_agent'] ?? null) && $data['user_agent'] !== ''
                 ? $data['user_agent']
-                : 'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)',
+                : self::DEFAULT_USER_AGENT,
             rateLimitDelay: is_int($data['rate_limit_delay'] ?? null) && $data['rate_limit_delay'] > 0
                 ? $data['rate_limit_delay']
                 : 1100,
             autoEnrich: (bool)($data['auto_enrich'] ?? true),
             fetchAlbumArt: (bool)($data['fetch_album_art'] ?? true),
             fetchAcoustId: (bool)($data['fetch_acoustid'] ?? true),
-            searchDepth: is_string($data['search_depth'] ?? null) && in_array($data['search_depth'], ['fast', 'normal', 'deep'], true)
+            searchDepth: is_string($data['search_depth'] ?? null)
+                && in_array($data['search_depth'], ['fast', 'normal', 'deep'], true)
                 ? $data['search_depth']
                 : 'normal',
         );
