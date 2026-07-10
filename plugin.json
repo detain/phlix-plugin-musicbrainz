@@ -2,7 +2,7 @@
     "name": "phlix-plugin-musicbrainz",
     "version": "0.1.0",
     "phlix_min_server_version": "0.14.0",
-    "type": "metadata",
+    "type": "metadata-provider",
     "entry": "Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin",
     "events": [
         "phlix.media.metadata_enrich",
