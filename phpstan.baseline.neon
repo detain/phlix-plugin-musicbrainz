@@ -1,0 +1,223 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\HttpClient\:\:get\(\) should return string\|null but returns string\|true\.$#'
+			identifier: return.type
+			count: 1
+			path: src/HttpClient.php
+
+		-
+			message: '#^Parameter \#2 \$options of function curl_setopt_array expects array\{10002\: non\-empty\-string, 19913\: bool, 13\: int, 52\: bool, 68\: int, 10023\: array\<int, string\>, 10018\: non\-empty\-string\}, array\{10002\: string, 19913\: true, 13\: int, 52\: true, 68\: 3, 10023\: array\<int, string\>, 10018\: string\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/HttpClient.php
+
+		-
+			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 2
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Binary operation "\+\=" between mixed and 15 results in an error\.$#'
+			identifier: assignOp.invalid
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Binary operation "\+\=" between mixed and 20 results in an error\.$#'
+			identifier: assignOp.invalid
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Binary operation "/" between mixed and 1000 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Cannot access offset ''artist'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Cannot access offset ''catalog\-number'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Cannot access offset ''id'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Cannot access offset ''name'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 7
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 5
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Expression on left side of \?\? is always null\.$#'
+			identifier: nullCoalesce.expr
+			count: 4
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:extractRecordingData\(\) has parameter \$recording with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:extractRecordingData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchAlbumData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchArtistData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:selectBestRecording\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function stripos expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Parameter \#1 \$mbid of method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchAlbumData\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Parameter \#1 \$mbid of method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchArtistData\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Parameter \#1 \$releaseMbid of method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:getFrontCover\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Property Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:\$logger is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/MetadataEnricher.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:get\(\) should return array\<string, mixed\> but returns array\<mixed, mixed\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:getCoverArt\(\) should return array\<int, array\<string, mixed\>\>\|null but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:lookupAcoustId\(\) should return array\<int, array\<string, mixed\>\>\|null but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:searchArtists\(\) should return array\<int, array\<string, mixed\>\> but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:searchRecordings\(\) should return array\<int, array\<string, mixed\>\> but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:searchReleases\(\) should return array\<int, array\<string, mixed\>\> but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Parameter \#1 \$url of method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:fetchImage\(\) expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of function in_array expects array, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Psr\\Log\\LoggerInterface\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 5
+			path: src/MusicBrainzApi.php
+
+		-
+			message: '#^Access to an undefined property Phlix\\Shared\\Events\\Library\\LibraryScanCompleted\:\:\$itemIds\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Access to an undefined property Phlix\\Shared\\Events\\Library\\LibraryScanCompleted\:\:\$profileId\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Call to method findById\(\) on an unknown class Phlix\\Media\\Library\\ItemRepository\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Call to static method fromRow\(\) on an unknown class Phlix\\Media\\Library\\MediaItem\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Class Phlix\\Media\\Library\\ItemRepository not found\.$#'
+			identifier: class.notFound
+			count: 2
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Property Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin\:\:\$itemRepository has unknown class Phlix\\Media\\Library\\ItemRepository as its type\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/MusicBrainzPlugin.php
