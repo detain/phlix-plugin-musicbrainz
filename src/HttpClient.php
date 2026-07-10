@@ -39,6 +39,7 @@ final class HttpClient implements HttpClientInterface
             return null;
         }
 
+        $userAgent = $headers['User-Agent'] ?? 'PhlixMusicBrainzPlugin/0.1.0';
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
@@ -46,7 +47,7 @@ final class HttpClient implements HttpClientInterface
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
-            CURLOPT_USERAGENT => $headers['User-Agent'] ?? 'PhlixMusicBrainzPlugin/0.1.0',
+            CURLOPT_USERAGENT => $userAgent,
         ]);
 
         $response = curl_exec($ch);
