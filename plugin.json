@@ -1,7 +1,7 @@
 {
     "name": "phlix-plugin-musicbrainz",
-    "version": "0.1.0",
-    "phlix_min_server_version": "0.14.0",
+    "version": "0.2.0",
+    "phlix_min_server_version": "1.2.0",
     "type": "metadata-provider",
     "entry": "Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin",
     "events": [
@@ -12,37 +12,53 @@
         "enabled": {
             "type": "boolean",
             "default": false,
-            "description": "Enable MusicBrainz metadata enrichment"
+            "required": false,
+            "label": "Enable MusicBrainz",
+            "description": "Master on/off for MusicBrainz enrichment. Optional; default off. No API key needed — MusicBrainz is an open service."
         },
         "user_agent": {
             "type": "string",
             "default": "PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
-            "description": "MusicBrainz API user agent (must be a valid contact email)"
+            "required": false,
+            "label": "User-Agent",
+            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). Optional — the default is fine; customise if you run a fork.",
+            "link": "https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
+            "link_text": "MusicBrainz API etiquette"
         },
         "rate_limit_delay": {
             "type": "integer",
             "default": 1100,
-            "description": "Minimum milliseconds between MusicBrainz API requests (respect their 1 req/s limit)"
+            "required": false,
+            "label": "Rate-limit delay (ms)",
+            "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second)."
         },
         "auto_enrich": {
             "type": "boolean",
             "default": true,
-            "description": "Automatically enrich music items during library scans"
+            "required": false,
+            "label": "Auto-enrich",
+            "description": "Automatically enrich music items as they are scanned. Optional; default on."
         },
         "fetch_album_art": {
             "type": "boolean",
             "default": true,
-            "description": "Fetch album artwork from Cover Art Archive"
+            "required": false,
+            "label": "Fetch album art",
+            "description": "Pull cover art via the Cover Art Archive. Optional; default on."
         },
         "fetch_acoustid": {
             "type": "boolean",
             "default": true,
-            "description": "Calculate and fetch AcoustID fingerprints"
+            "required": false,
+            "label": "Fetch AcoustID",
+            "description": "Use AcoustID audio fingerprints to improve matching. Optional; default on."
         },
         "search_depth": {
             "type": "string",
             "default": "normal",
-            "description": "Search depth: 'fast' (title match only), 'normal' (title + artist), 'deep' (all metadata)"
+            "required": false,
+            "label": "Search depth",
+            "description": "How hard to search for matches (e.g. normal / deep). Optional; default normal."
         }
     }
 }

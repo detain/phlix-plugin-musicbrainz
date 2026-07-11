@@ -13,6 +13,7 @@ namespace Phlix\Plugin\MusicBrainz;
 
 use Phlix\Media\Library\ItemRepository;
 use Phlix\Media\Library\MediaItem;
+use Phlix\Shared\Plugin\ConfigurableInterface;
 use Phlix\Shared\Plugin\LifecycleInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -39,7 +40,7 @@ use Psr\Log\NullLogger;
  * @package Phlix\Plugin\MusicBrainz
  * @since 0.14.0
  */
-final class MusicBrainzPlugin implements LifecycleInterface
+final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterface
 {
     /**
      * Plugin type identifier used in the plugin manifest.
