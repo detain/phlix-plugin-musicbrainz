@@ -28,6 +28,13 @@ final class MusicBrainzPluginTest extends TestCase
         $this->assertTrue($plugin->getSettings()->fetchAlbumArt);
     }
 
+    public function testImplementsConfigurableInterface(): void
+    {
+        $plugin = new MusicBrainzPlugin();
+
+        $this->assertInstanceOf(\Phlix\Shared\Plugin\ConfigurableInterface::class, $plugin);
+    }
+
     public function testConfigureUpdatesSettings(): void
     {
         $plugin = new MusicBrainzPlugin();
