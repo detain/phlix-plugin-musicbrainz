@@ -20,6 +20,11 @@ use Psr\Log\NullLogger;
  * Implements the MusicBrainz API v2 with proper rate limiting (1 req/s),
  * user agent configuration, and proper JSON response handling.
  *
+ * SV-4.5: Static per-host concurrency limiting via Swoole Channel semaphore.
+ * When running in a Workerman/Swoole coroutine context, concurrent requests
+ * to MusicBrainz are bounded to prevent overwhelming the server. Falls back to
+ * per-instance rate limiting in non-coroutine contexts (CLI, testing).
+ *
  * @package Phlix\Plugin\MusicBrainz
  */
 final class MusicBrainzApi
@@ -27,11 +32,23 @@ final class MusicBrainzApi
     private const BASE_URL = 'https://musicbrainz.org/ws/2';
     private const COVER_ART_ARCHIVE_URL = 'https://coverartarchive.org';
 
+    /** @var int Maximum concurrent requests per host (bounded limiter) */
+    private const MAX_CONCURRENT_PER_HOST = 2;
+
     private HttpClientInterface $httpClient;
     private string $userAgent;
     private int $rateLimitDelay;
     private LoggerInterface $logger;
     private ?int $lastRequestTime = null;
+
+    /**
+     * Static per-host request limiter using Swoole Channel semaphore.
+     * Prevents overwhelming MusicBrainz with concurrent requests.
+     * Uses static to share across all instances in the process.
+     *
+     * @var \Swoole\Coroutine\Channel|null
+     */
+    private static ?\Swoole\Coroutine\Channel $limiterChannel = null;
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
@@ -43,6 +60,80 @@ final class MusicBrainzApi
         $this->userAgent = $userAgent;
         $this->rateLimitDelay = $rateLimitDelay;
         $this->logger = $logger ?? new NullLogger();
+        $this->initLimiterChannel();
+    }
+
+    /**
+     * Initialize the static per-host limiter channel.
+     * Called once per process to create the semaphore.
+     *
+     * @since SV-4.5
+     */
+    private function initLimiterChannel(): void
+    {
+        // Static init guard - only initialize once per process
+        if (self::$limiterChannel === null && class_exists(\Swoole\Coroutine\Channel::class)) {
+            self::$limiterChannel = new \Swoole\Coroutine\Channel(self::MAX_CONCURRENT_PER_HOST);
+            // Pre-fill with available slots
+            for ($i = 0; $i < self::MAX_CONCURRENT_PER_HOST; $i++) {
+                self::$limiterChannel->push(true);
+            }
+        }
+    }
+
+    /**
+     * Acquire a slot from the static per-host limiter.
+     * Blocks (yields to coroutine scheduler) if no slots available.
+     *
+     * @since SV-4.5
+     */
+    private function acquireLimiterSlot(): void
+    {
+        if (self::$limiterChannel !== null) {
+            self::$limiterChannel->pop();
+        }
+    }
+
+    /**
+     * Release a slot back to the static per-host limiter.
+     *
+     * @since SV-4.5
+     */
+    private function releaseLimiterSlot(): void
+    {
+        if (self::$limiterChannel !== null) {
+            self::$limiterChannel->push(true);
+        }
+    }
+
+    /**
+     * Make an HTTP request with per-host rate limiting.
+     *
+     * SV-4.5: Uses static per-host concurrency limiter to prevent
+     * overwhelming MusicBrainz with concurrent requests.
+     *
+     * @param string $url Full URL to request
+     * @param array<string, string> $headers Request headers
+     * @param array<string, mixed> $query Query parameters
+     *
+     * @return string|null Response body or null on failure
+     *
+     * @since SV-4.5
+     */
+    private function requestWithLimiting(string $url, array $headers = [], array $query = []): ?string
+    {
+        // SV-4.5: Acquire slot from static per-host limiter before making request
+        $this->acquireLimiterSlot();
+
+        try {
+            // Apply per-instance rate limiting (1 req/s for MusicBrainz)
+            $this->applyRateLimiting();
+
+            return $this->httpClient->get($url, $headers, $query);
+        } finally {
+            // SV-4.5: Release slot back to limiter after request completes
+            $this->releaseLimiterSlot();
+        }
     }
 
     /**
@@ -86,7 +177,7 @@ final class MusicBrainzApi
     /**
      * Search for recordings (tracks) by query.
      *
-     * @param string $query Search query (track name, artist, isrc, etc.)
+     * @param string $query Track name, artist, isrc, etc.
      * @param int $limit Maximum number of results (1-100)
      *
      * @return array<int, array<string, mixed>> Recording results
@@ -165,10 +256,8 @@ final class MusicBrainzApi
      */
     public function getCoverArt(string $releaseMbid): ?array
     {
-        $this->applyRateLimiting();
-
         try {
-            $response = $this->httpClient->get(
+            $response = $this->requestWithLimiting(
                 self::COVER_ART_ARCHIVE_URL . "/release/{$releaseMbid}",
                 ['User-Agent' => $this->userAgent]
             );
@@ -184,7 +273,7 @@ final class MusicBrainzApi
 
             return $data['images'] ?? null;
         } catch (\Throwable $e) {
-            $this->logger?->warning('MusicBrainz: failed to fetch cover art', [
+            $this->logger->warning('MusicBrainz: failed to fetch cover art', [
                 'release_mbid' => $releaseMbid,
                 'error' => $e->getMessage(),
             ]);
@@ -242,17 +331,15 @@ final class MusicBrainzApi
             return null;
         }
 
-        $this->applyRateLimiting();
-
         try {
-            $data = $this->httpClient->get($url, ['User-Agent' => $this->userAgent]);
+            $data = $this->requestWithLimiting($url, ['User-Agent' => $this->userAgent]);
             if ($data === null) {
                 return null;
             }
 
             return base64_encode($data);
         } catch (\Throwable $e) {
-            $this->logger?->warning('MusicBrainz: failed to fetch image', [
+            $this->logger->warning('MusicBrainz: failed to fetch image', [
                 'url' => $url,
                 'error' => $e->getMessage(),
             ]);
@@ -271,15 +358,10 @@ final class MusicBrainzApi
      */
     public function lookupAcoustId(string $fingerprint, int $duration): ?array
     {
-        $this->applyRateLimiting();
-
         try {
-            // AcoustID API
-            $response = $this->httpClient->get(
+            $response = $this->requestWithLimiting(
                 'https://acoustid.org/lookup',
-                [
-                    'User-Agent' => $this->userAgent,
-                ],
+                ['User-Agent' => $this->userAgent],
                 [
                     'client' => 'BSNFf9y3', // Public MusicBrainz client key for AcoustID
                     'fingerprint' => $fingerprint,
@@ -299,7 +381,7 @@ final class MusicBrainzApi
 
             return $data['results'] ?? null;
         } catch (\Throwable $e) {
-            $this->logger?->warning('MusicBrainz: AcoustID lookup failed', [
+            $this->logger->warning('MusicBrainz: AcoustID lookup failed', [
                 'error' => $e->getMessage(),
             ]);
 
@@ -317,13 +399,11 @@ final class MusicBrainzApi
      */
     private function get(string $path, array $query = []): array
     {
-        $this->applyRateLimiting();
-
         $url = self::BASE_URL . $path;
         $query['fmt'] = $query['fmt'] ?? 'json';
 
         try {
-            $response = $this->httpClient->get(
+            $response = $this->requestWithLimiting(
                 $url,
                 ['User-Agent' => $this->userAgent],
                 $query
@@ -335,7 +415,7 @@ final class MusicBrainzApi
 
             $data = json_decode($response, true);
             if (!is_array($data)) {
-                $this->logger?->warning('MusicBrainz: invalid JSON response', [
+                $this->logger->warning('MusicBrainz: invalid JSON response', [
                     'path' => $path,
                 ]);
 
@@ -344,7 +424,7 @@ final class MusicBrainzApi
 
             return $data;
         } catch (\Throwable $e) {
-            $this->logger?->warning('MusicBrainz: API request failed', [
+            $this->logger->warning('MusicBrainz: API request failed', [
                 'path' => $path,
                 'error' => $e->getMessage(),
             ]);
@@ -355,16 +435,25 @@ final class MusicBrainzApi
 
     /**
      * Apply rate limiting to respect MusicBrainz's 1 req/s limit.
+     *
+     * Uses blocking sleep in non-coroutine context, yields to event loop
+     * in Swoole coroutine context.
      */
     private function applyRateLimiting(): void
     {
         if ($this->lastRequestTime !== null) {
             $elapsed = (microtime(true) * 1000) - $this->lastRequestTime;
             if ($elapsed < $this->rateLimitDelay) {
-                usleep((int)(($this->rateLimitDelay - $elapsed) * 1000));
+                $sleepMs = (int) ($this->rateLimitDelay - $elapsed);
+                // Yield to event loop in coroutine context
+                if (class_exists(\Swoole\Coroutine::class) && \Swoole\Coroutine::getCid() > 0) {
+                    \Swoole\Coroutine::sleep((float) $sleepMs / 1000);
+                } else {
+                    usleep($sleepMs * 1000);
+                }
             }
         }
 
-        $this->lastRequestTime = (int)(microtime(true) * 1000);
+        $this->lastRequestTime = (int) (microtime(true) * 1000);
     }
 }
