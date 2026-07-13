@@ -181,12 +181,6 @@ parameters:
 			path: src/MusicBrainzApi.php
 
 		-
-			message: '#^Using nullsafe method call on non\-nullable type Psr\\Log\\LoggerInterface\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 5
-			path: src/MusicBrainzApi.php
-
-		-
 			message: '#^Access to an undefined property Phlix\\Shared\\Events\\Library\\LibraryScanCompleted\:\:\$itemIds\.$#'
 			identifier: property.notFound
 			count: 2
