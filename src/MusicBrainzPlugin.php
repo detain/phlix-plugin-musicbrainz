@@ -22,9 +22,12 @@ use Psr\Log\NullLogger;
 /**
  * MusicBrainz metadata enrichment plugin for Phlix.
  *
- * Subscribes to `phlix.media.metadata_enrich` and `phlix.library.scan_complete`
- * events to enrich music library items with metadata from MusicBrainz,
- * Cover Art Archive, and AcoustID.
+ * Subscribes to `phlix.library.scan.completed`
+ * ({@see \Phlix\Shared\Events\Library\LibraryScanCompleted}) to enrich
+ * music library items with metadata from MusicBrainz, Cover Art
+ * Archive, and AcoustID after a scan finishes. {@see self::enrichItem()} is
+ * also callable directly (e.g. from an on-demand "refresh metadata" admin
+ * action) for single-item enrichment outside the scan-completed flow.
  *
  * Enrichment includes:
  * - Artist metadata (names, aliases, country, dates, genres, tags)
