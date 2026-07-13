@@ -60,19 +60,45 @@ final class MusicBrainzApi
         $this->userAgent = $userAgent;
         $this->rateLimitDelay = $rateLimitDelay;
         $this->logger = $logger ?? new NullLogger();
-        $this->initLimiterChannel();
+        // Deliberately NOT calling initLimiterChannel() here: constructing
+        // (and pre-filling) a Swoole\Coroutine\Channel is a coroutine-only
+        // operation. Instantiating this class outside a coroutine (plain
+        // PHPUnit/CLI runs) must not fatal, so channel setup is deferred
+        // until the first actual acquireLimiterSlot() call, and only then
+        // if we're really inside a coroutine. See inCoroutineContext().
     }
 
     /**
-     * Initialize the static per-host limiter channel.
-     * Called once per process to create the semaphore.
+     * Whether the caller is executing inside a live Swoole coroutine.
+     *
+     * `Swoole\Coroutine\Channel` (construction, push, and pop) throws
+     * `Swoole\Error: API must be called in the coroutine` when touched
+     * outside a coroutine context — so this must be checked before doing
+     * anything with the channel at all, not just before push()/pop(). This
+     * mirrors the guard phlix-server centralizes as
+     * `Phlix\Common\Runtime\WorkerContext::inCoroutine()`; this plugin does
+     * not depend on phlix-server, so the check is kept local.
+     *
+     * @since SV-4.5
+     */
+    private static function inCoroutineContext(): bool
+    {
+        return class_exists(\Swoole\Coroutine::class) && \Swoole\Coroutine::getCid() > 0;
+    }
+
+    /**
+     * Lazily initialize the static per-host limiter channel.
+     *
+     * Only constructs the channel the first time we're actually inside a
+     * coroutine. In non-coroutine contexts (CLI, PHPUnit) this is a no-op
+     * and the limiter falls back to per-instance rate limiting only
+     * (see acquireLimiterSlot()/releaseLimiterSlot()).
      *
      * @since SV-4.5
      */
     private function initLimiterChannel(): void
     {
-        // Static init guard - only initialize once per process
-        if (self::$limiterChannel === null && class_exists(\Swoole\Coroutine\Channel::class)) {
+        if (self::$limiterChannel === null && self::inCoroutineContext()) {
             self::$limiterChannel = new \Swoole\Coroutine\Channel(self::MAX_CONCURRENT_PER_HOST);
             // Pre-fill with available slots
             for ($i = 0; $i < self::MAX_CONCURRENT_PER_HOST; $i++) {
@@ -85,13 +111,20 @@ final class MusicBrainzApi
      * Acquire a slot from the static per-host limiter.
      * Blocks (yields to coroutine scheduler) if no slots available.
      *
+     * Outside a coroutine there is no scheduler to yield to and the channel
+     * is coroutine-only, so this is a no-op and per-instance rate limiting
+     * (applyRateLimiting()) is the sole throttle.
+     *
      * @since SV-4.5
      */
     private function acquireLimiterSlot(): void
     {
-        if (self::$limiterChannel !== null) {
-            self::$limiterChannel->pop();
+        if (!self::inCoroutineContext()) {
+            return;
         }
+
+        $this->initLimiterChannel();
+        self::$limiterChannel?->pop();
     }
 
     /**
@@ -101,9 +134,11 @@ final class MusicBrainzApi
      */
     private function releaseLimiterSlot(): void
     {
-        if (self::$limiterChannel !== null) {
-            self::$limiterChannel->push(true);
+        if (!self::inCoroutineContext() || self::$limiterChannel === null) {
+            return;
         }
+
+        self::$limiterChannel->push(true);
     }
 
     /**
@@ -446,7 +481,7 @@ final class MusicBrainzApi
             if ($elapsed < $this->rateLimitDelay) {
                 $sleepMs = (int) ($this->rateLimitDelay - $elapsed);
                 // Yield to event loop in coroutine context
-                if (class_exists(\Swoole\Coroutine::class) && \Swoole\Coroutine::getCid() > 0) {
+                if (self::inCoroutineContext()) {
                     \Swoole\Coroutine::sleep((float) $sleepMs / 1000);
                 } else {
                     usleep($sleepMs * 1000);
