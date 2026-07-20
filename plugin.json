@@ -20,7 +20,7 @@
             "default": "PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
             "required": false,
             "label": "User-Agent",
-            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). Optional — the default is fine; customise if you run a fork.",
+            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info, e.g. a URL). Optional — the default is fine; customise if you run a fork.",
             "link": "https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
             "link_text": "MusicBrainz API etiquette"
         },

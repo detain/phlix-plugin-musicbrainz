@@ -83,7 +83,7 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertFalse($settings->isConfigured());
     }
 
-    public function testIsConfiguredReturnsFalseWhenUserAgentLacksAt(): void
+    public function testIsConfiguredReturnsFalseWhenUserAgentLacksUrl(): void
     {
         $settings = new MusicBrainzSettings(
             enabled: true,
@@ -97,7 +97,7 @@ final class MusicBrainzSettingsTest extends TestCase
     {
         $settings = new MusicBrainzSettings(
             enabled: true,
-            userAgent: 'ValidAgent/1.0 (contact@example.com)'
+            userAgent: 'ValidAgent/1.0 (https://example.com/contact)'
         );
 
         $this->assertTrue($settings->isConfigured());

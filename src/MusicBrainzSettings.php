@@ -72,7 +72,7 @@ final class MusicBrainzSettings
     {
         return $this->enabled
             && $this->userAgent !== ''
-            && str_contains($this->userAgent, '@');
+            && str_contains($this->userAgent, '://');
     }
 
     /**
