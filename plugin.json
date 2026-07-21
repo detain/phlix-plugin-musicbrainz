@@ -1,6 +1,6 @@
 {
     "name": "phlix-plugin-musicbrainz",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "phlix_min_server_version": "1.2.0",
     "type": "metadata-provider",
     "entry": "Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin",
@@ -50,14 +50,14 @@
             "default": true,
             "required": false,
             "label": "Fetch AcoustID",
-            "description": "Use AcoustID audio fingerprints to improve matching. Optional; default on."
+            "description": "Intended to use AcoustID audio fingerprints to improve matching. NOT YET IMPLEMENTED — the lookup needs a locally computed fingerprint the plugin does not produce, so this toggle currently has no effect."
         },
         "search_depth": {
             "type": "string",
             "default": "normal",
             "required": false,
             "label": "Search depth",
-            "description": "How hard to search for matches (e.g. normal / deep). Optional; default normal."
+            "description": "How hard to search for matches: fast, normal or deep. Optional; default normal."
         }
     }
 }
