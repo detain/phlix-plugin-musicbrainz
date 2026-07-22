@@ -31,7 +31,6 @@ final class MusicBrainzSettings
         public readonly int $rateLimitDelay = 1100,
         public readonly bool $autoEnrich = true,
         public readonly bool $fetchAlbumArt = true,
-        public readonly bool $fetchAcoustId = true,
         public readonly string $searchDepth = 'normal',
     ) {
     }
@@ -55,7 +54,6 @@ final class MusicBrainzSettings
                 : 1100,
             autoEnrich: (bool)($data['auto_enrich'] ?? true),
             fetchAlbumArt: (bool)($data['fetch_album_art'] ?? true),
-            fetchAcoustId: (bool)($data['fetch_acoustid'] ?? true),
             searchDepth: is_string($data['search_depth'] ?? null)
                 && in_array($data['search_depth'], ['fast', 'normal', 'deep'], true)
                 ? $data['search_depth']
@@ -88,7 +86,6 @@ final class MusicBrainzSettings
             'rate_limit_delay' => $this->rateLimitDelay,
             'auto_enrich' => $this->autoEnrich,
             'fetch_album_art' => $this->fetchAlbumArt,
-            'fetch_acoustid' => $this->fetchAcoustId,
             'search_depth' => $this->searchDepth,
         ];
     }
@@ -106,7 +103,6 @@ final class MusicBrainzSettings
             'rate_limit_delay' => $this->rateLimitDelay,
             'auto_enrich' => $this->autoEnrich,
             'fetch_album_art' => $this->fetchAlbumArt,
-            'fetch_acoustid' => $this->fetchAcoustId,
             'search_depth' => $this->searchDepth,
         ];
     }

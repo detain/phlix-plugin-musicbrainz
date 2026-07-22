@@ -59,29 +59,18 @@ final class MetadataEnrichmentResultTest extends TestCase
         $this->assertTrue($result->hasData());
     }
 
-    public function testHasDataReturnsTrueWhenAcoustIdPresent(): void
-    {
-        $result = new MetadataEnrichmentResult(
-            acoustId: 'acoustid-123'
-        );
-
-        $this->assertTrue($result->hasData());
-    }
-
     public function testToArrayContainsAllFields(): void
     {
         $artistData = ['name' => 'Artist'];
         $albumData = ['title' => 'Album'];
         $trackData = [['title' => 'Track']];
         $albumArt = base64_encode('image');
-        $acoustId = 'acoustid-123';
 
         $result = new MetadataEnrichmentResult(
             artistData: $artistData,
             albumData: $albumData,
             trackData: $trackData,
-            albumArtBase64: $albumArt,
-            acoustId: $acoustId
+            albumArtBase64: $albumArt
         );
 
         $array = $result->toArray();
@@ -90,7 +79,7 @@ final class MetadataEnrichmentResultTest extends TestCase
         $this->assertSame($albumData, $array['album']);
         $this->assertSame($trackData, $array['tracks']);
         $this->assertSame($albumArt, $array['album_art']);
-        $this->assertSame($acoustId, $array['acoustid']);
+        $this->assertArrayNotHasKey('acoustid', $array);
     }
 
     public function testEmptyResultToArrayHasEmptyArrays(): void
@@ -103,6 +92,5 @@ final class MetadataEnrichmentResultTest extends TestCase
         $this->assertSame([], $array['album']);
         $this->assertSame([], $array['tracks']);
         $this->assertNull($array['album_art']);
-        $this->assertNull($array['acoustid']);
     }
 }

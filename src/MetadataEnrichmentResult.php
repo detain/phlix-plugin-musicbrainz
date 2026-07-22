@@ -26,14 +26,12 @@ final class MetadataEnrichmentResult
      * @param array<string, mixed> $albumData Album/release metadata from MusicBrainz
      * @param array<int, array<string, mixed>> $trackData Track metadata from MusicBrainz
      * @param string|null $albumArtBase64 Base64-encoded album artwork
-     * @param string|null $acoustId AcoustID fingerprint result
      */
     public function __construct(
         public readonly array $artistData = [],
         public readonly array $albumData = [],
         public readonly array $trackData = [],
         public readonly ?string $albumArtBase64 = null,
-        public readonly ?string $acoustId = null,
     ) {
     }
 
@@ -47,8 +45,7 @@ final class MetadataEnrichmentResult
         return !empty($this->artistData)
             || !empty($this->albumData)
             || !empty($this->trackData)
-            || $this->albumArtBase64 !== null
-            || $this->acoustId !== null;
+            || $this->albumArtBase64 !== null;
     }
 
     /**
@@ -63,7 +60,6 @@ final class MetadataEnrichmentResult
             'album' => $this->albumData,
             'tracks' => $this->trackData,
             'album_art' => $this->albumArtBase64,
-            'acoustid' => $this->acoustId,
         ];
     }
 }

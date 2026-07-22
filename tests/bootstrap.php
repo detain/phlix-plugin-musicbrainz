@@ -36,6 +36,16 @@ if (!class_exists(\Phlix\Media\Library\ItemRepository::class)) {
         {
             return [];
         }
+
+        /**
+         * Mirrors the real host signature so PHPUnit can mock/assert the
+         * enrichment persistence call.
+         *
+         * @param array<string, mixed> $data
+         */
+        public function update(string $id, array $data): void
+        {
+        }
     }
 
     class_alias(ItemRepositoryStub::class, \Phlix\Media\Library\ItemRepository::class);
@@ -88,20 +98,4 @@ if (!interface_exists(\Phlix\Shared\Plugin\LifecycleInterface::class)) {
     }
 
     class_alias(LifecycleInterfaceStub::class, \Phlix\Shared\Plugin\LifecycleInterface::class);
-}
-
-/**
- * Stub for LibraryScanCompleted event.
- */
-if (!class_exists(\Phlix\Shared\Events\Library\LibraryScanCompleted::class)) {
-    final class LibraryScanCompletedStub
-    {
-        public function __construct(
-            public readonly string $profileId,
-            public readonly array $itemIds,
-        ) {
-        }
-    }
-
-    class_alias(LibraryScanCompletedStub::class, \Phlix\Shared\Events\Library\LibraryScanCompleted::class);
 }

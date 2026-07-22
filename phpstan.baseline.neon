@@ -1,8 +1,14 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Method Phlix\\Plugin\\MusicBrainz\\HttpClient\:\:get\(\) should return string\|null but returns string\|true\.$#'
-			identifier: return.type
+			message: '#^Call to method request\(\) on an unknown class Workerman\\Http\\Client\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/HttpClient.php
+
+		-
+			message: '#^Instantiated class Workerman\\Http\\Client not found\.$#'
+			identifier: class.notFound
 			count: 1
 			path: src/HttpClient.php
 
@@ -145,12 +151,6 @@ parameters:
 			path: src/MusicBrainzApi.php
 
 		-
-			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:lookupAcoustId\(\) should return array\<int, array\<string, mixed\>\>\|null but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/MusicBrainzApi.php
-
-		-
 			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:searchArtists\(\) should return array\<int, array\<string, mixed\>\> but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -181,19 +181,19 @@ parameters:
 			path: src/MusicBrainzApi.php
 
 		-
-			message: '#^Access to an undefined property Phlix\\Shared\\Events\\Library\\LibraryScanCompleted\:\:\$itemIds\.$#'
-			identifier: property.notFound
+			message: '#^Access to property \$metadata on an unknown class Phlix\\Media\\Library\\MediaItem\.$#'
+			identifier: class.notFound
 			count: 2
 			path: src/MusicBrainzPlugin.php
 
 		-
-			message: '#^Access to an undefined property Phlix\\Shared\\Events\\Library\\LibraryScanCompleted\:\:\$profileId\.$#'
-			identifier: property.notFound
+			message: '#^Call to method findById\(\) on an unknown class Phlix\\Media\\Library\\ItemRepository\.$#'
+			identifier: class.notFound
 			count: 1
 			path: src/MusicBrainzPlugin.php
 
 		-
-			message: '#^Call to method findById\(\) on an unknown class Phlix\\Media\\Library\\ItemRepository\.$#'
+			message: '#^Call to method update\(\) on an unknown class Phlix\\Media\\Library\\ItemRepository\.$#'
 			identifier: class.notFound
 			count: 1
 			path: src/MusicBrainzPlugin.php
@@ -206,6 +206,12 @@ parameters:
 
 		-
 			message: '#^Class Phlix\\Media\\Library\\ItemRepository not found\.$#'
+			identifier: class.notFound
+			count: 2
+			path: src/MusicBrainzPlugin.php
+
+		-
+			message: '#^Parameter \$mediaItem of method Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin\:\:persist\(\) has invalid type Phlix\\Media\\Library\\MediaItem\.$#'
 			identifier: class.notFound
 			count: 2
 			path: src/MusicBrainzPlugin.php

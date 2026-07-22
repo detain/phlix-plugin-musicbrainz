@@ -100,17 +100,6 @@ final class MetadataEnricherTest extends TestCase
         $this->assertSame('Test Track', $result->trackData['title']);
     }
 
-    public function testEnrichSkipsAcoustIdWhenDisabled(): void
-    {
-        $api = $this->createMockApi([]);
-        $settings = new MusicBrainzSettings(fetchAcoustId: false);
-        $enricher = new MetadataEnricher($api, $settings);
-
-        $result = $enricher->enrich('Test Track', null, null, 180);
-
-        $this->assertNull($result->acoustId);
-    }
-
     public function testEnrichWithIsrcQuery(): void
     {
         $api = $this->createMockApi([

@@ -64,7 +64,6 @@ final class MetadataEnricher
         $albumData = [];
         $trackData = [];
         $albumArtBase64 = null;
-        $acoustId = null;
 
         // Search based on depth
         if ($this->settings->searchDepth === 'fast') {
@@ -139,19 +138,11 @@ final class MetadataEnricher
             }
         }
 
-        // AcoustID lookup if enabled
-        if ($this->settings->fetchAcoustId && $duration !== null && $duration > 0) {
-            // AcoustID requires a fingerprint which we'd need to compute locally
-            // For now, we store the duration for potential future fingerprinting
-            // The actual AcoustID lookup would happen with a computed fingerprint
-        }
-
         return new MetadataEnrichmentResult(
             artistData: $artistData,
             albumData: $albumData,
             trackData: $trackData,
             albumArtBase64: $albumArtBase64,
-            acoustId: $acoustId,
         );
     }
 

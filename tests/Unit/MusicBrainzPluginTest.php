@@ -57,8 +57,17 @@ final class MusicBrainzPluginTest extends TestCase
         $plugin = new MusicBrainzPlugin();
         $events = $plugin->subscribedEvents();
 
-        $this->assertArrayHasKey(\Phlix\Shared\Events\Library\LibraryScanCompleted::class, $events);
-        $this->assertSame('onLibraryScanCompleted', $events[\Phlix\Shared\Events\Library\LibraryScanCompleted::class]);
+        // Must subscribe to the PER-ITEM event (carries mediaItemId)...
+        $this->assertArrayHasKey(\Phlix\Shared\Events\Library\MediaItemAdded::class, $events);
+        $this->assertSame('onMediaItemAdded', $events[\Phlix\Shared\Events\Library\MediaItemAdded::class]);
+
+        // ...and MUST NOT subscribe to the aggregate scan-completed event
+        // (the old bug: it has no item IDs -> count(null) TypeError).
+        $this->assertArrayNotHasKey(\Phlix\Shared\Events\Library\LibraryScanCompleted::class, $events);
+        $this->assertFalse(
+            method_exists($plugin, 'onLibraryScanCompleted'),
+            'The wrong-event handler onLibraryScanCompleted must be removed.'
+        );
     }
 
     public function testGetSettingsForSpa(): void

@@ -25,7 +25,6 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame(1100, $settings->rateLimitDelay);
         $this->assertTrue($settings->autoEnrich);
         $this->assertTrue($settings->fetchAlbumArt);
-        $this->assertTrue($settings->fetchAcoustId);
         $this->assertSame('normal', $settings->searchDepth);
     }
 
@@ -37,7 +36,6 @@ final class MusicBrainzSettingsTest extends TestCase
             'rate_limit_delay' => 2000,
             'auto_enrich' => false,
             'fetch_album_art' => false,
-            'fetch_acoustid' => false,
             'search_depth' => 'deep',
         ];
 
@@ -48,7 +46,6 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame(2000, $settings->rateLimitDelay);
         $this->assertFalse($settings->autoEnrich);
         $this->assertFalse($settings->fetchAlbumArt);
-        $this->assertFalse($settings->fetchAcoustId);
         $this->assertSame('deep', $settings->searchDepth);
     }
 
@@ -111,7 +108,6 @@ final class MusicBrainzSettingsTest extends TestCase
             rateLimitDelay: 1500,
             autoEnrich: true,
             fetchAlbumArt: false,
-            fetchAcoustId: true,
             searchDepth: 'fast'
         );
 
@@ -122,7 +118,7 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame(1500, $array['rate_limit_delay']);
         $this->assertSame(true, $array['auto_enrich']);
         $this->assertSame(false, $array['fetch_album_art']);
-        $this->assertSame(true, $array['fetch_acoustid']);
+        $this->assertArrayNotHasKey('fetch_acoustid', $array);
         $this->assertSame('fast', $array['search_depth']);
     }
 

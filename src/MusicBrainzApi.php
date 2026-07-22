@@ -384,47 +384,6 @@ final class MusicBrainzApi
     }
 
     /**
-     * Look up an AcoustID fingerprint result.
-     *
-     * @param string $fingerprint AcoustID fingerprint
-     * @param int $duration Track duration in seconds
-     *
-     * @return array<int, array<string, mixed>>|null AcoustID results or null
-     */
-    public function lookupAcoustId(string $fingerprint, int $duration): ?array
-    {
-        try {
-            $response = $this->requestWithLimiting(
-                'https://acoustid.org/lookup',
-                ['User-Agent' => $this->userAgent],
-                [
-                    'client' => 'BSNFf9y3', // Public MusicBrainz client key for AcoustID
-                    'fingerprint' => $fingerprint,
-                    'duration' => $duration,
-                    'meta' => 'recordings',
-                ]
-            );
-
-            if ($response === null) {
-                return null;
-            }
-
-            $data = json_decode($response, true);
-            if (!is_array($data) || ($data['status'] ?? '') !== 'ok') {
-                return null;
-            }
-
-            return $data['results'] ?? null;
-        } catch (\Throwable $e) {
-            $this->logger->warning('MusicBrainz: AcoustID lookup failed', [
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-    }
-
-    /**
      * Perform a GET request to the MusicBrainz API.
      *
      * @param string $path API path (e.g., /artist, /release)
