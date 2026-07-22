@@ -1,6 +1,6 @@
 {
     "name": "phlix-plugin-musicbrainz",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "phlix_min_server_version": "1.2.0",
     "type": "metadata-provider",
     "entry": "Phlix\\Plugin\\MusicBrainz\\MusicBrainzPlugin",
@@ -12,6 +12,7 @@
             "type": "boolean",
             "default": false,
             "required": false,
+            "tier": "standard",
             "label": "Enable MusicBrainz",
             "description": "Master on/off for MusicBrainz enrichment. Optional; default off. No API key needed — MusicBrainz is an open service."
         },
@@ -19,6 +20,7 @@
             "type": "string",
             "default": "PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
             "required": false,
+            "tier": "advanced",
             "label": "User-Agent",
             "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info, e.g. a URL). Optional — the default is fine; customise if you run a fork.",
             "link": "https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
@@ -28,6 +30,7 @@
             "type": "integer",
             "default": 1100,
             "required": false,
+            "tier": "advanced",
             "label": "Rate-limit delay (ms)",
             "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second)."
         },
@@ -35,6 +38,7 @@
             "type": "boolean",
             "default": true,
             "required": false,
+            "tier": "advanced",
             "label": "Auto-enrich",
             "description": "Automatically enrich music items as they are scanned. Optional; default on."
         },
@@ -42,6 +46,7 @@
             "type": "boolean",
             "default": true,
             "required": false,
+            "tier": "advanced",
             "label": "Fetch album art",
             "description": "Pull cover art via the Cover Art Archive. Optional; default on."
         },
@@ -49,6 +54,7 @@
             "type": "string",
             "default": "normal",
             "required": false,
+            "tier": "advanced",
             "label": "Search depth",
             "description": "How hard to search for matches: fast, normal or deep. Optional; default normal."
         }
