@@ -3,8 +3,8 @@
 [![tests](https://github.com/detain/phlix-plugin-musicbrainz/actions/workflows/test.yml/badge.svg)](https://github.com/detain/phlix-plugin-musicbrainz/actions/workflows/test.yml)
 
 > MusicBrainz metadata provider for [Phlix](https://github.com/detain/phlix-server) —
-> enriches your music library with artist/album/track metadata, album art from
-> the Cover Art Archive, and AcoustID fingerprint integration.
+> enriches your music library with artist/album/track metadata and album art from
+> the Cover Art Archive.
 
 ## Overview
 
@@ -15,10 +15,10 @@ music items with comprehensive metadata:
 - **Album metadata** — release date, label, catalog number, barcode, genres
 - **Track metadata** — track number, disc number, duration, ISRC codes
 - **Album artwork** — fetched from the Cover Art Archive API
-- **AcoustID fingerprints** — acoustic identification for tracks
 
-It subscribes to `phlix.media.metadata_enrich` and `phlix.library.scan_complete`
-to enrich music items during library operations.
+It subscribes to `phlix.library.item.added` and enqueues each item in
+`src/EnrichmentQueue.php`, so enrichment runs deferred and throttled instead of
+inline during a library scan.
 
 ## Install
 
@@ -45,26 +45,30 @@ All settings are optional — MusicBrainz is an open service, so no API key is r
 | `rate_limit_delay` | integer | `1100` | Minimum delay between MusicBrainz requests (ms). Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). |
 | `auto_enrich` | boolean | `true` | Automatically enrich music items as they are scanned. Optional; default on. |
 | `fetch_album_art` | boolean | `true` | Pull cover art via the Cover Art Archive. Optional; default on. |
-| `fetch_acoustid` | boolean | `true` | Use AcoustID audio fingerprints to improve matching. Optional; default on. |
-| `search_depth` | string | `normal` | How hard to search for matches (e.g. normal / deep). Optional; default normal. |
+| `search_depth` | string | `normal` | How hard to search for matches: fast, normal or deep. Optional; default normal. |
 
 ## Development
 
 ```bash
 composer install
 vendor/bin/phpunit
+vendor/bin/phpstan analyse -c phpstan.neon
+vendor/bin/phpcs src --standard=PSR12
 ```
 
 The entry class is `Phlix\Plugin\MusicBrainz\MusicBrainzPlugin` (implements
-`Phlix\Shared\Plugin\LifecycleInterface`). It runs inside a Phlix server host,
+`Phlix\Shared\Plugin\LifecycleInterface` and
+`Phlix\Shared\Plugin\ConfigurableInterface`). It runs inside a Phlix server host,
 which provides the library services at runtime.
 
 ## API Rate Limiting
 
 MusicBrainz requires **no more than 1 request per second**. This plugin enforces
-a configurable delay (default 1100ms) between all API calls. Please configure
-a valid `user_agent` with contact information so MusicBrainz can reach you if
-there are issues.
+a configurable delay (default 1100ms) between all API calls, and
+`src/EnrichmentQueue.php` releases at most one queued item per interval (floor of
+1s) so the budget holds across a whole scan. Please configure a valid
+`user_agent` with contact information so MusicBrainz can reach you if there are
+issues.
 
 ## License
 
