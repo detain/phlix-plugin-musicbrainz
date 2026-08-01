@@ -65,7 +65,7 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
      */
     private function countingClient(array $responses = []): HttpClientInterface
     {
-        return new class($responses) implements HttpClientInterface {
+        return new class ($responses) implements HttpClientInterface {
             public int $calls = 0;
 
             /** @param array<string, string> $responses */
@@ -88,7 +88,7 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
 
     private function container(?ItemRepository $repo): ContainerInterface
     {
-        return new class($repo) implements ContainerInterface {
+        return new class ($repo) implements ContainerInterface {
             public function __construct(private ?ItemRepository $repo)
             {
             }

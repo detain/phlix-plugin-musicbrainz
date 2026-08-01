@@ -21,7 +21,7 @@ final class MetadataEnricherUncoveredTest extends TestCase
 {
     private function createMockApi(array $responses): MusicBrainzApi
     {
-        $httpClient = new class($responses) implements HttpClientInterface {
+        $httpClient = new class ($responses) implements HttpClientInterface {
             private array $responses;
 
             public function __construct(array $responses)
