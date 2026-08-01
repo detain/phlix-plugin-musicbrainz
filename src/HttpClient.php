@@ -83,7 +83,7 @@ final class HttpClient implements HttpClientInterface
         // the Swoole runtime) so other worker tasks keep making progress.
         $waited = 0.0;
         $maxWait = (float) $this->timeout + 1.0;
-        while (!$state['done'] && $waited < $maxWait) {
+        while ($state['done'] === false && $waited < $maxWait) {
             usleep(1000);
             $waited += 0.001;
         }
