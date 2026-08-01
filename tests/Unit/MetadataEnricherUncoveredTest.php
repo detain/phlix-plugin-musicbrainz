@@ -325,4 +325,50 @@ final class MetadataEnricherUncoveredTest extends TestCase
         $this->assertTrue($result->hasData());
         $this->assertSame('3 Minute Track', $result->trackData['title']);
     }
+
+    public function testEnrichWithReleaseFallbackAndAlbumArtFetch(): void
+    {
+        // Test the code path where recording search fails but release search succeeds
+        // and fetchAlbumArt is enabled. This covers line 123 in MetadataEnricher.
+        // The key is that we need getRelease lookup to work, which requires
+        // returning single-release format, not search format.
+        // We achieve this by putting the specific /release/release-mbid-456 pattern BEFORE /release
+        $api = $this->createMockApi([
+            '/recording' => json_encode(['recordings' => []]),  // No recording found
+            // Specific lookup MUST come before generic /release to avoid str_contains match
+            '/release/release-mbid-456' => json_encode([
+                'id' => 'release-mbid-456',
+                'title' => 'Fallback Album',
+                'date' => '2024-01-01',
+                'artist-credit' => [
+                    ['name' => 'Fallback Artist', 'artist' => ['id' => 'artist-mbid-456', 'name' => 'Fallback Artist']],
+                ],
+            ]),
+            // Generic search pattern - used for release search
+            '/release' => json_encode([
+                'releases' => [
+                    [
+                        'id' => 'release-mbid-456',
+                        'title' => 'Fallback Album',
+                    ],
+                ],
+            ]),
+        ]);
+
+        // fetchAlbumArt: true to ensure we try to get front cover
+        $settings = new MusicBrainzSettings(searchDepth: 'normal', fetchAlbumArt: true);
+        $enricher = new MetadataEnricher($api, $settings);
+
+        // Recording not found, album provided - triggers release search fallback
+        $result = $enricher->enrich('Unknown Track', null, 'Fallback Album');
+
+        // Album data should be populated from getRelease lookup
+        $this->assertNotEmpty($result->albumData);
+        $this->assertSame('release-mbid-456', $result->albumData['mbid']);
+        $this->assertSame('Fallback Album', $result->albumData['title']);
+
+        // Album art will be null because coverartarchive.org is not mocked,
+        // but the code path to fetch it is exercised
+        $this->assertNull($result->albumArtBase64);
+    }
 }
