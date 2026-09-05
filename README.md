@@ -54,6 +54,8 @@ composer install
 vendor/bin/phpunit
 vendor/bin/phpstan analyse -c phpstan.neon
 vendor/bin/phpcs src --standard=PSR12
+# audits the whole composer.lock (require AND require-dev); the composer-audit CI job runs this
+php scripts/security-audit-check.php
 ```
 
 The entry class is `Phlix\Plugin\MusicBrainz\MusicBrainzPlugin` (implements
