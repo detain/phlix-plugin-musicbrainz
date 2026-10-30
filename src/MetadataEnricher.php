@@ -113,7 +113,11 @@ final class MetadataEnricher
 
             // If no recording found, try release search
             if (empty($albumData) && $album !== null) {
-                $releaseResults = $this->api->searchReleases($album . ' ' . ($artist ?? ''), 5);
+                $releaseQuery = self::lucenePhrase($album);
+                if ($artist !== null && $artist !== '') {
+                    $releaseQuery .= ' ' . self::lucenePhrase($artist);
+                }
+                $releaseResults = $this->api->searchReleases($releaseQuery, 5);
                 if (count($releaseResults) > 0) {
                     $release = $releaseResults[0];
                     $albumMbid = $release['id'] ?? null;
@@ -128,7 +132,7 @@ final class MetadataEnricher
 
             // Deep search: also look up artist if not found yet
             if ($this->settings->searchDepth === 'deep' && empty($artistData) && $artist !== null) {
-                $artistResults = $this->api->searchArtists($artist, 5);
+                $artistResults = $this->api->searchArtists(self::lucenePhrase($artist), 5);
                 if (count($artistResults) > 0) {
                     $artistMbid = $artistResults[0]['id'] ?? null;
                     if ($artistMbid !== null) {
@@ -148,19 +152,65 @@ final class MetadataEnricher
 
     /**
      * Build search query from available metadata.
+     *
+     * Every user-visible string below ultimately lands in a MusicBrainz
+     * Lucene query. Raw interpolation would let a crafted file tag rewrite
+     * the query (field terms, boolean operators, sub-queries), so free-text
+     * values are emitted only as escaped quoted phrases. An ISRC is the one
+     * value safe as a bare field term — but only once it validates against
+     * the fixed 12-character ISRC grammar; anything else degrades to the
+     * title/artist phrase rather than reaching the query raw.
      */
     private function buildQuery(string $title, ?string $artist, ?string $album, ?string $isrc): string
     {
-        if ($isrc !== null && $isrc !== '') {
+        if (self::isValidIsrc($isrc)) {
             return 'isrc:' . $isrc;
         }
 
-        $parts = [$title];
+        $parts = [self::lucenePhrase($title)];
         if ($artist !== null && $artist !== '') {
-            $parts[] = $artist;
+            $parts[] = self::lucenePhrase($artist);
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * True only for a syntactically valid 12-character ISRC
+     * (2-letter registrant, 3-char year+registrant-detail, 7-digit
+     * designation), e.g. USRC12345678. The charset is alphanumeric-
+     * uppercase/digits only, so such a value is inert inside a Lucene
+     * field term and can be passed through without quoting.
+     */
+    private static function isValidIsrc(?string $isrc): bool
+    {
+        return is_string($isrc)
+            && preg_match('/^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$/', $isrc) === 1;
+    }
+
+    /**
+     * Lucene operator/field/occurrence characters that must never travel
+     * unescaped inside (or outside) a query phrase.
+     */
+    private const LUCENE_SPECIALS = [
+        '+', '-', '!', '(', ')', '{', '}', '[', ']',
+        '^', '"', '~', '*', '?', ':', '/', '&', '|',
+    ];
+
+    /**
+     * Render free text as a Lucene quoted phrase: backslash-escape every
+     * special character (including the quote and backslash themselves), then
+     * wrap. A hostile tag can then only ever be a search PHRASE — never an
+     * operator, field term, or nested sub-query.
+     */
+    private static function lucenePhrase(string $value): string
+    {
+        $escaped = str_replace('\\', '\\\\', trim($value));
+        foreach (self::LUCENE_SPECIALS as $special) {
+            $escaped = str_replace($special, '\\' . $special, $escaped);
+        }
+
+        return '"' . $escaped . '"';
     }
 
     /**
