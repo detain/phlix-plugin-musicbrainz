@@ -15,10 +15,19 @@ namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
+use Phlix\Plugin\MusicBrainz\HttpResponse;
 use Phlix\Plugin\MusicBrainz\MusicBrainzApi;
 
 final class MusicBrainzApiImageTrustTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     /**
      * @param string $imageUrl the URL the (fake) cover listing names
      * @param array<int, string> $fetched captures every fetched URL
@@ -31,20 +40,22 @@ final class MusicBrainzApiImageTrustTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): ?string
+            public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 $this->fetched[] = $url;
                 if (str_contains($url, 'image.bin')) {
-                    return 'PILFERED-SECRET';
+                    return HttpResponse::fromBody(is_string('PILFERED-SECRET') ? (string)'PILFERED-SECRET' : null);
                 }
 
                 if (str_contains($url, 'coverartarchive.org')) {
-                    return (string)json_encode([
+                    return HttpResponse::fromBody(is_string((string)json_encode([
                         'images' => [['front' => true, 'image' => $this->imageUrl]],
-                    ]);
+                    ])) ? (string)(string)json_encode([
+                        'images' => [['front' => true, 'image' => $this->imageUrl]],
+                    ]) : null);
                 }
 
-                return null;
+                return HttpResponse::failure();
             }
         };
 

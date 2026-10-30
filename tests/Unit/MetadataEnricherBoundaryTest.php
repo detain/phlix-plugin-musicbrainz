@@ -14,12 +14,21 @@ namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
+use Phlix\Plugin\MusicBrainz\HttpResponse;
 use Phlix\Plugin\MusicBrainz\MetadataEnricher;
 use Phlix\Plugin\MusicBrainz\MusicBrainzApi;
 use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 
 final class MetadataEnricherBoundaryTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     /**
      * @param array<string, string> $responses pattern => body
      * @param array<int, string>    $urls     captured request URLs by reference
@@ -32,16 +41,16 @@ final class MetadataEnricherBoundaryTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): ?string
+            public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 $this->urls[] = $url;
                 foreach ($this->responses as $pattern => $body) {
                     if (str_contains($url, $pattern)) {
-                        return $body;
+                        return HttpResponse::fromBody($body);
                     }
                 }
 
-                return null;
+                return HttpResponse::failure();
             }
         };
 

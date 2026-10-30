@@ -16,6 +16,14 @@ use Phlix\Plugin\MusicBrainz\EnrichmentQueue;
 
 final class EnrichmentQueueTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     /**
      * The core throttle guarantee: even when drained back-to-back, at most one
      * item is released per >=1s window (MusicBrainz 1-req/s etiquette).

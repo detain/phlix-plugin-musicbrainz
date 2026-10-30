@@ -39,7 +39,7 @@ final class HttpClient implements HttpClientInterface
     /**
      * {@inheritdoc}
      */
-    public function get(string $url, array $headers = [], array $query = []): ?string
+    public function get(string $url, array $headers = [], array $query = []): HttpResponse
     {
         if (count($query) > 0) {
             $url .= '?' . http_build_query($query);
@@ -57,20 +57,27 @@ final class HttpClient implements HttpClientInterface
      *
      * @param array<string, string> $headers
      */
-    private function getAsync(string $url, array $headers): ?string
+    private function getAsync(string $url, array $headers): HttpResponse
     {
-        /** @var array{done: bool, body: string|null} $state */
-        $state = ['done' => false, 'body' => null];
+        /** @var array{done: bool, response: HttpResponse} $state */
+        $state = ['done' => false, 'response' => HttpResponse::failure()];
 
         $client = new \Workerman\Http\Client(['timeout' => $this->timeout]);
         $client->request($url, [
             'method' => 'GET',
             'headers' => $headers,
             'success' => static function ($response) use (&$state): void {
-                $status = (int) $response->getStatusCode();
-                $state['body'] = ($status >= 200 && $status < 400)
-                    ? (string) $response->getBody()
-                    : null;
+                $status = (int)$response->getStatusCode();
+                $body = ($status >= 200 && $status < 400) ? (string)$response->getBody() : null;
+                $headers = [];
+                foreach (['etag', 'retry-after'] as $name) {
+                    $value = (string)$response->getHeaderLine($name);
+                    if ($value !== '') {
+                        $headers[$name] = $value;
+                    }
+                }
+
+                $state['response'] = new HttpResponse($status, $body, $headers);
                 $state['done'] = true;
             },
             'error' => static function ($exception) use (&$state): void {
@@ -82,27 +89,32 @@ final class HttpClient implements HttpClientInterface
         // Cooperative wait — yields to the event loop (usleep is hooked under
         // the Swoole runtime) so other worker tasks keep making progress.
         $waited = 0.0;
-        $maxWait = (float) $this->timeout + 1.0;
+        $maxWait = (float)$this->timeout + 1.0;
         while ($state['done'] === false && $waited < $maxWait) {
             usleep(1000);
             $waited += 0.001;
         }
 
-        return $state['body'];
+        return $state['response'];
     }
 
     /**
      * Blocking cURL GET — CLI / test fallback only (no event loop present).
      *
+     * Carries the HTTP status and the rate-limiting/conditional-GET headers
+     * upstream; bodies are returned only for 2xx-3xx exchanges.
+     *
      * @param array<string, string> $headers
      */
-    private function getBlocking(string $url, array $headers): ?string
+    private function getBlocking(string $url, array $headers): HttpResponse
     {
         $ch = curl_init();
         if ($ch === false) {
-            return null;
+            return HttpResponse::failure();
         }
 
+        /** @var array<string, string> $responseHeaders */
+        $responseHeaders = [];
         $userAgent = $headers['User-Agent'] ?? 'PhlixMusicBrainzPlugin/0.1.0';
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
@@ -116,17 +128,26 @@ final class HttpClient implements HttpClientInterface
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
             CURLOPT_USERAGENT => $userAgent,
+            CURLOPT_HEADERFUNCTION => static function ($handle, string $header) use (&$responseHeaders): int {
+                $line = trim($header);
+                if ($line !== '' && str_contains($line, ':')) {
+                    [$name, $value] = explode(':', $line, 2);
+                    $responseHeaders[strtolower(trim($name))] = trim($value);
+                }
+
+                return strlen($header);
+            },
         ]);
 
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         if (!is_string($response) || $httpCode >= 400) {
-            return null;
+            return new HttpResponse($httpCode > 0 ? $httpCode : null, null, $responseHeaders);
         }
 
-        return $response;
+        return new HttpResponse($httpCode, $response, $responseHeaders);
     }
 
     /**

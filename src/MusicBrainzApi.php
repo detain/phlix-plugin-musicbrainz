@@ -46,11 +46,68 @@ final class MusicBrainzApi
     /** @var int Maximum concurrent requests per host (bounded limiter) */
     private const MAX_CONCURRENT_PER_HOST = 2;
 
+    /** @var int Cap on exponential backoff escalation (delay * 2^6 = 64x) */
+    private const MAX_BACKOFF_LEVEL = 6;
+
+    /** @var int Never park a caller longer than this on a rate-limit signal */
+    private const MAX_BACKOFF_MS = 60000;
+
+    /** @var int Conditional-GET (ETag) memo capacity, FIFO-evicted */
+    private const ETAG_CACHE_SIZE = 256;
+
+    /** @var int Negative (404) memo capacity, FIFO-evicted */
+    private const NEGATIVE_CACHE_SIZE = 512;
+
+    /** @var int How long a 404 stays "known absent" (ms) */
+    private const NEGATIVE_TTL_MS = 3600000;
+
+    /** @var int Cover-art base64 memo capacity — values are large images */
+    private const COVER_MEMO_SIZE = 4;
+
     private HttpClientInterface $httpClient;
     private string $userAgent;
     private int $rateLimitDelay;
     private LoggerInterface $logger;
-    private ?int $lastRequestTime = null;
+
+    /** @var callable(int):void Test seam for the pacing/backoff sleep */
+    private $sleeper;
+
+    /** Monotonic millisecond stamp of the last dispatched request. */
+    private ?int $lastRequestHrMs = null;
+
+    /**
+     * Process-wide rate-limit backoff (M-MUSICBRAINZ-08): shared across
+     * instances because a 429/503 is issued against the process's IP, not
+     * against one client object.
+     */
+    private static int $backoffLevel = 0;
+    private static ?int $backoffUntilHrMs = null;
+
+    /**
+     * Process-wide Conditional-GET memo: cache key => ['etag','body','headers']
+     * (M-MUSICBRAINZ-09). MusicBrainz answers stable lookups with identical
+     * ETags; revalidation turns them into header-only 304s.
+     *
+     * @var array<string, array{etag: string, body: string, headers: array<string, string>}>
+     */
+    private static array $etagStore = [];
+
+    /**
+     * Process-wide negative memo (404 => "known absent"): cache key => expiry
+     * in monotonic ms. A 404 for a given MBID is stable; without this, a
+     * missing release behind a search hit was re-fetched on every drain tick.
+     *
+     * @var array<string, int>
+     */
+    private static array $negativeCache = [];
+
+    /**
+     * Small cover-art memo: release MBID => base64 image (or null = none).
+     * Base64 art is bulky, so the capacity is deliberately tiny (FIFO).
+     *
+     * @var array<string, string|null>
+     */
+    private static array $coverMemo = [];
 
     /**
      * Static per-host request limiter using Swoole Channel semaphore.
@@ -65,18 +122,55 @@ final class MusicBrainzApi
         ?HttpClientInterface $httpClient = null,
         string $userAgent = 'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)',
         int $rateLimitDelay = 1100,
-        ?LoggerInterface $logger = null
+        ?LoggerInterface $logger = null,
+        ?callable $sleeper = null
     ) {
         $this->httpClient = $httpClient ?? new HttpClient();
         $this->userAgent = $userAgent;
         $this->rateLimitDelay = $rateLimitDelay;
         $this->logger = $logger ?? new NullLogger();
+        // Seam used only by tests that must observe a backoff park without
+        // burning wall-clock seconds; production always sleeps for real.
+        $this->sleeper = $sleeper ?? static function (int $ms): void {
+            if (self::inCoroutineContext()) {
+                \Swoole\Coroutine::sleep((float)$ms / 1000);
+            } else {
+                usleep($ms * 1000);
+            }
+        };
         // Deliberately NOT calling initLimiterChannel() here: constructing
         // (and pre-filling) a Swoole\Coroutine\Channel is a coroutine-only
         // operation. Instantiating this class outside a coroutine (plain
         // PHPUnit/CLI runs) must not fatal, so channel setup is deferred
         // until the first actual acquireLimiterSlot() call, and only then
         // if we're really inside a coroutine. See inCoroutineContext().
+    }
+
+    /**
+     * Reset all process-wide pacing/cache state.
+     *
+     * The backoff window, ETag memo, negative memo and cover memo are static
+     * on purpose (per-IP signal, per-process budget — matching how a resident
+     * worker shares one MusicBrainz identity across plugin instances). Tests
+     * — and any embedder needing a clean slate after a config change — call
+     * this to drop inherited state.
+     */
+    public static function clearProcessState(): void
+    {
+        self::$backoffLevel = 0;
+        self::$backoffUntilHrMs = null;
+        self::$etagStore = [];
+        self::$negativeCache = [];
+        self::$coverMemo = [];
+    }
+
+    /**
+     * Monotonic milliseconds — immune to wall-clock jumps (NTP, DST, manual
+     * setback) which the old microtime-based pacing was exposed to.
+     */
+    private static function monotonicMs(): int
+    {
+        return (int)(hrtime(true) / 1000000);
     }
 
     /**
@@ -153,7 +247,7 @@ final class MusicBrainzApi
     }
 
     /**
-     * Make an HTTP request with per-host rate limiting.
+     * Make an HTTP request with per-host rate limiting and backoff.
      *
      * SV-4.5: Uses static per-host concurrency limiter to prevent
      * overwhelming MusicBrainz with concurrent requests.
@@ -162,17 +256,17 @@ final class MusicBrainzApi
      * @param array<string, string> $headers Request headers
      * @param array<string, mixed> $query Query parameters
      *
-     * @return string|null Response body or null on failure
+     * @return HttpResponse The completed (or failed) exchange
      *
      * @since SV-4.5
      */
-    private function requestWithLimiting(string $url, array $headers = [], array $query = []): ?string
+    private function requestWithLimiting(string $url, array $headers = [], array $query = []): HttpResponse
     {
         // SV-4.5: Acquire slot from static per-host limiter before making request
         $this->acquireLimiterSlot();
 
         try {
-            // Apply per-instance rate limiting (1 req/s for MusicBrainz)
+            // Apply per-instance rate limiting + process-wide backoff window
             $this->applyRateLimiting();
 
             return $this->httpClient->get($url, $headers, $query);
@@ -180,6 +274,99 @@ final class MusicBrainzApi
             // SV-4.5: Release slot back to limiter after request completes
             $this->releaseLimiterSlot();
         }
+    }
+
+    /**
+     * Single funnel for every GET the API layer performs.
+     *
+     * Adds the two memo layers the transport contract now makes possible:
+     *  - Conditional GET: a stored ETag is resent as If-None-Match and a 304
+     *    is served from the stored body (MusicBrainz answers stable lookups
+     *    with byte-identical ETags, so this turns repeat traffic into
+     *    header-only exchanges).
+     *  - Negative memo: a 404 short-circuits re-fetches of the same
+     *    (missing) resource for NEGATIVE_TTL_MS. Transport failures are NOT
+     *    negatives — a DNS blip must not fossilize into "does not exist".
+     *
+     * Both stores are process-wide (bounded, FIFO) so every plugin instance
+     * shares one MusicBrainz budget. Rate-limit observation happens here too.
+     *
+     * @param array<string, string> $headers
+     * @param array<string, mixed> $query
+     */
+    private function requestCached(string $url, array $headers = [], array $query = []): HttpResponse
+    {
+        $key = $url . (count($query) > 0 ? '?' . http_build_query($query) : '');
+
+        $expiresAt = self::$negativeCache[$key] ?? null;
+        if ($expiresAt !== null) {
+            if ($expiresAt > self::monotonicMs()) {
+                return new HttpResponse(404, null);
+            }
+            unset(self::$negativeCache[$key]);
+        }
+
+        $conditionalHeaders = $headers;
+        $stored = self::$etagStore[$key] ?? null;
+        if ($stored !== null && $stored['etag'] !== '') {
+            $conditionalHeaders['If-None-Match'] = $stored['etag'];
+        }
+
+        $response = $this->requestWithLimiting($url, $conditionalHeaders, $query);
+        $this->observeRateSignals($response);
+
+        if ($response->notModified() && $stored !== null) {
+            return new HttpResponse(200, $stored['body'], $stored['headers']);
+        }
+
+        if ($response->notFound()) {
+            if (count(self::$negativeCache) >= self::NEGATIVE_CACHE_SIZE) {
+                unset(self::$negativeCache[array_key_first(self::$negativeCache)]);
+            }
+            self::$negativeCache[$key] = self::monotonicMs() + self::NEGATIVE_TTL_MS;
+
+            return $response;
+        }
+
+        $etag = $response->etag();
+        if ($response->ok() && $response->body !== null && $etag !== null) {
+            if (count(self::$etagStore) >= self::ETAG_CACHE_SIZE) {
+                unset(self::$etagStore[array_key_first(self::$etagStore)]);
+            }
+            self::$etagStore[$key] = ['etag' => $etag, 'body' => $response->body, 'headers' => $response->headers];
+        }
+
+        return $response;
+    }
+
+    /**
+     * Feed the exchange into the process-wide exponential backoff.
+     *
+     * A 429/503 raises the escalation level (bounded), and the caller-facing
+     * park window becomes max(delay * 2^level, Retry-After) capped at
+     * MAX_BACKOFF_MS. Any non-rate-limited exchange (success, 404, even a
+     * transport failure) resets the escalation — the server told us to slow
+     * down, and we are no longer being told that.
+     */
+    private function observeRateSignals(HttpResponse $response): void
+    {
+        if (!$response->isRateLimited()) {
+            self::$backoffLevel = 0;
+            self::$backoffUntilHrMs = null;
+
+            return;
+        }
+
+        self::$backoffLevel = min(self::$backoffLevel + 1, self::MAX_BACKOFF_LEVEL);
+
+        $escalatedMs = $this->rateLimitDelay * (2 ** self::$backoffLevel);
+        $retryAfter = $response->retryAfterSeconds();
+        $parkMs = min(
+            self::MAX_BACKOFF_MS,
+            $retryAfter !== null ? max($escalatedMs, $retryAfter * 1000) : $escalatedMs
+        );
+
+        self::$backoffUntilHrMs = self::monotonicMs() + $parkMs;
     }
 
     /**
@@ -309,16 +496,16 @@ final class MusicBrainzApi
     public function getCoverArt(string $releaseMbid): ?array
     {
         try {
-            $response = $this->requestWithLimiting(
+            $response = $this->requestCached(
                 self::COVER_ART_ARCHIVE_URL . "/release/{$releaseMbid}",
                 ['User-Agent' => $this->userAgent]
             );
 
-            if ($response === null) {
+            if (!$response->ok() || $response->body === null) {
                 return null;
             }
 
-            $data = json_decode($response, true);
+            $data = json_decode($response->body, true);
             if (!is_array($data)) {
                 return null;
             }
@@ -337,11 +524,32 @@ final class MusicBrainzApi
     /**
      * Get the primary front cover image for a release.
      *
+     * Results (including "this release has no art") are memoized per release
+     * MBID in a deliberately tiny FIFO window: base64 images are bulky, but
+     * re-resolving cover art on every enrichment of items from one album was
+     * pure waste.
+     *
      * @param string $releaseMbid MusicBrainz release ID
      *
      * @return string|null Base64-encoded image data or null
      */
     public function getFrontCover(string $releaseMbid): ?string
+    {
+        if (array_key_exists($releaseMbid, self::$coverMemo)) {
+            return self::$coverMemo[$releaseMbid];
+        }
+
+        $resolved = $this->resolveFrontCover($releaseMbid);
+
+        if (count(self::$coverMemo) >= self::COVER_MEMO_SIZE) {
+            unset(self::$coverMemo[array_key_first(self::$coverMemo)]);
+        }
+        self::$coverMemo[$releaseMbid] = $resolved;
+
+        return $resolved;
+    }
+
+    private function resolveFrontCover(string $releaseMbid): ?string
     {
         $images = $this->getCoverArt($releaseMbid);
         if ($images === null) {
@@ -349,6 +557,10 @@ final class MusicBrainzApi
         }
 
         foreach ($images as $image) {
+            if (!is_array($image)) {
+                continue;
+            }
+
             if (($image['front'] ?? false) === true) {
                 return $this->fetchImage($image['image'] ?? '');
             }
@@ -356,7 +568,11 @@ final class MusicBrainzApi
 
         // Fallback to first image with type "Primary"
         foreach ($images as $image) {
-            $types = $image['types'] ?? [];
+            if (!is_array($image)) {
+                continue;
+            }
+
+            $types = is_array($image['types'] ?? null) ? $image['types'] : [];
             if (in_array('Primary', $types, true)) {
                 return $this->fetchImage($image['image'] ?? '');
             }
@@ -364,7 +580,9 @@ final class MusicBrainzApi
 
         // Last resort: first image
         if (count($images) > 0) {
-            return $this->fetchImage($images[0]['image'] ?? '');
+            $first = reset($images);
+
+            return $this->fetchImage(is_array($first) ? ($first['image'] ?? '') : '');
         }
 
         return null;
@@ -398,12 +616,16 @@ final class MusicBrainzApi
         }
 
         try {
-            $data = $this->requestWithLimiting($url, ['User-Agent' => $this->userAgent]);
-            if ($data === null) {
+            // Images are intentionally NOT etag-memoized (bulk); the cover
+            // memo above already dedupes per release. Rate signals still
+            // feed the shared backoff window.
+            $response = $this->requestWithLimiting($url, ['User-Agent' => $this->userAgent]);
+            $this->observeRateSignals($response);
+            if (!$response->ok() || $response->body === null) {
                 return null;
             }
 
-            return base64_encode($data);
+            return base64_encode($response->body);
         } catch (\Throwable $e) {
             $this->logger->warning('MusicBrainz: failed to fetch image', [
                 'url' => $url,
@@ -444,17 +666,17 @@ final class MusicBrainzApi
         $query['fmt'] = $query['fmt'] ?? 'json';
 
         try {
-            $response = $this->requestWithLimiting(
+            $response = $this->requestCached(
                 $url,
                 ['User-Agent' => $this->userAgent],
                 $query
             );
 
-            if ($response === null) {
+            if (!$response->ok() || $response->body === null) {
                 return [];
             }
 
-            $data = json_decode($response, true);
+            $data = json_decode($response->body, true);
             if (!is_array($data)) {
                 $this->logger->warning('MusicBrainz: invalid JSON response', [
                     'path' => $path,
@@ -475,26 +697,34 @@ final class MusicBrainzApi
     }
 
     /**
-     * Apply rate limiting to respect MusicBrainz's 1 req/s limit.
+     * Apply rate limiting to respect MusicBrainz's 1 req/s limit, plus the
+     * process-wide backoff window a 429/503 opened (M-MUSICBRAINZ-08).
      *
-     * Uses blocking sleep in non-coroutine context, yields to event loop
-     * in Swoole coroutine context.
+     * Uses a monotonic clock (hrtime) so a wall-clock adjustment can neither
+     * double the pacing nor skip it. Blocking sleep in non-coroutine context,
+     * yield in Swoole coroutine context; the seam constructor parameter lets
+     * tests observe a park without burning seconds.
      */
     private function applyRateLimiting(): void
     {
-        if ($this->lastRequestTime !== null) {
-            $elapsed = (microtime(true) * 1000) - $this->lastRequestTime;
+        $now = self::monotonicMs();
+        $waitMs = 0;
+
+        if ($this->lastRequestHrMs !== null) {
+            $elapsed = $now - $this->lastRequestHrMs;
             if ($elapsed < $this->rateLimitDelay) {
-                $sleepMs = (int) ($this->rateLimitDelay - $elapsed);
-                // Yield to event loop in coroutine context
-                if (self::inCoroutineContext()) {
-                    \Swoole\Coroutine::sleep((float) $sleepMs / 1000);
-                } else {
-                    usleep($sleepMs * 1000);
-                }
+                $waitMs = $this->rateLimitDelay - $elapsed;
             }
         }
 
-        $this->lastRequestTime = (int) (microtime(true) * 1000);
+        if (self::$backoffUntilHrMs !== null && self::$backoffUntilHrMs > $now) {
+            $waitMs = max($waitMs, self::$backoffUntilHrMs - $now);
+        }
+
+        if ($waitMs > 0) {
+            ($this->sleeper)($waitMs);
+        }
+
+        $this->lastRequestHrMs = self::monotonicMs();
     }
 }

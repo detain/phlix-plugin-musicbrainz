@@ -16,6 +16,14 @@ use Phlix\Plugin\MusicBrainz\MetadataEnrichmentResult;
 
 final class MetadataEnrichmentResultTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     public function testHasDataReturnsFalseForEmptyResult(): void
     {
         $result = new MetadataEnrichmentResult();

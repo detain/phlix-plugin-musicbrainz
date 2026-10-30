@@ -40,8 +40,8 @@ final class HttpClientTest extends TestCase
         $client = new HttpClient(10);
         $result = $client->get('https://httpbin.org/get');
 
-        $this->assertNotNull($result);
-        $data = json_decode($result, true);
+        $this->assertNotNull($result->body);
+        $data = json_decode($result->body, true);
         $this->assertIsArray($data);
         $this->assertArrayHasKey('url', $data);
     }
@@ -51,8 +51,8 @@ final class HttpClientTest extends TestCase
         $client = new HttpClient(10);
         $result = $client->get('https://httpbin.org/get', [], ['foo' => 'bar', 'baz' => 'qux']);
 
-        $this->assertNotNull($result);
-        $data = json_decode($result, true);
+        $this->assertNotNull($result->body);
+        $data = json_decode($result->body, true);
         $this->assertIsArray($data);
         $this->assertArrayHasKey('args', $data);
         $this->assertSame('bar', $data['args']['foo'] ?? $data['args']['foo']); // httpbin returns args
@@ -65,8 +65,8 @@ final class HttpClientTest extends TestCase
             'X-Custom-Header' => 'TestValue',
         ]);
 
-        $this->assertNotNull($result);
-        $data = json_decode($result, true);
+        $this->assertNotNull($result->body);
+        $data = json_decode($result->body, true);
         $this->assertIsArray($data);
         $this->assertArrayHasKey('headers', $data);
         // httpbin may return header keys with different casing
@@ -85,7 +85,8 @@ final class HttpClientTest extends TestCase
         $client = new HttpClient(10);
         $result = $client->get('https://httpbin.org/status/404');
 
-        $this->assertNull($result);
+        $this->assertSame(404, $result->status);
+        $this->assertNull($result->body);
     }
 
     public function testGetReturnsNullOn500(): void
@@ -93,7 +94,8 @@ final class HttpClientTest extends TestCase
         $client = new HttpClient(10);
         $result = $client->get('https://httpbin.org/status/500');
 
-        $this->assertNull($result);
+        $this->assertSame(500, $result->status);
+        $this->assertNull($result->body);
     }
 
     public function testGetReturnsNullOnTimeout(): void
@@ -103,8 +105,9 @@ final class HttpClientTest extends TestCase
         // httpbin's /delay endpoint can simulate slow responses
         $result = $client->get('https://httpbin.org/delay/10');
 
-        // Should return null due to timeout
-        $this->assertNull($result);
+        // No completed exchange: no status, no body
+        $this->assertNull($result->status);
+        $this->assertNull($result->body);
     }
 
     public function testGetReturnsNullForInvalidUrl(): void
@@ -113,7 +116,8 @@ final class HttpClientTest extends TestCase
         // This should fail to connect or resolve
         $result = $client->get('https://this-domain-does-not-exist-12345.com/');
 
-        $this->assertNull($result);
+        $this->assertNull($result->status);
+        $this->assertNull($result->body);
     }
 
     public function testGetReturnsNullOnConnectionRefused(): void
@@ -122,6 +126,7 @@ final class HttpClientTest extends TestCase
         // Connect to a port nothing is listening on
         $result = $client->get('http://127.0.0.1:59999/');
 
-        $this->assertNull($result);
+        $this->assertNull($result->status);
+        $this->assertNull($result->body);
     }
 }

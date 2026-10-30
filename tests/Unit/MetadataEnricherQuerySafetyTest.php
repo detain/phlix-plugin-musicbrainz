@@ -14,12 +14,21 @@ namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
+use Phlix\Plugin\MusicBrainz\HttpResponse;
 use Phlix\Plugin\MusicBrainz\MetadataEnricher;
 use Phlix\Plugin\MusicBrainz\MusicBrainzApi;
 use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 
 final class MetadataEnricherQuerySafetyTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     /**
      * Build an enricher whose fake transport records the Lucene query string
      * of every request and answers every search with zero results.
@@ -34,15 +43,17 @@ final class MetadataEnricherQuerySafetyTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): ?string
+            public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 if (isset($query['query'])) {
                     $this->queries[] = (string)$query['query'];
                 }
 
-                return str_contains($url, '/recording') || str_contains($url, '/release?') || str_contains($url, '/artist?')
+                return HttpResponse::fromBody(is_string(str_contains($url, '/recording') || str_contains($url, '/release?') || str_contains($url, '/artist?')
                     ? json_encode(['recordings' => [], 'releases' => [], 'artists' => []])
-                    : null;
+                    : null) ? (string)str_contains($url, '/recording') || str_contains($url, '/release?') || str_contains($url, '/artist?')
+                    ? json_encode(['recordings' => [], 'releases' => [], 'artists' => []])
+                    : null : null);
             }
         };
 

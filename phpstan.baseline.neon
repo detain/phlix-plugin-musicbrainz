@@ -85,12 +85,6 @@ parameters:
 			path: src/MusicBrainzApi.php
 
 		-
-			message: '#^Parameter \#2 \$haystack of function in_array expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/MusicBrainzApi.php
-
-		-
 			message: '#^Access to property \$metadata on an unknown class Phlix\\Media\\Library\\MediaItem\.$#'
 			identifier: class.notFound
 			count: 2

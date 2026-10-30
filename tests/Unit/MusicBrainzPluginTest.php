@@ -19,6 +19,14 @@ use Psr\Log\NullLogger;
 
 final class MusicBrainzPluginTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     public function testConstructorWithDefaultSettings(): void
     {
         $plugin = new MusicBrainzPlugin();

@@ -16,6 +16,14 @@ use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 
 final class MusicBrainzSettingsTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     public function testDefaultValues(): void
     {
         $settings = new MusicBrainzSettings();

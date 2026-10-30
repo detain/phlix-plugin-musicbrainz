@@ -16,9 +16,18 @@ use Phlix\Plugin\MusicBrainz\MetadataEnricher;
 use Phlix\Plugin\MusicBrainz\MusicBrainzApi;
 use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
+use Phlix\Plugin\MusicBrainz\HttpResponse;
 
 final class MetadataEnricherAlbumArtTest extends TestCase
 {
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Drop the process-wide backoff/memo state so each test starts clean.
+        \Phlix\Plugin\MusicBrainz\MusicBrainzApi::clearProcessState();
+    }
     /**
      * Creates a mock HTTP client with URL pattern matching.
      *
@@ -47,14 +56,16 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                 $this->responses = $responses;
             }
 
-            public function get(string $url, array $headers = [], array $query = []): ?string
+            public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 foreach ($this->responses as $pattern => $response) {
                     if (str_contains($url, $pattern)) {
-                        return is_callable($response) ? $response($url, $query) : $response;
+                        $resolved = is_callable($response) ? $response($url, $query) : $response;
+
+                return HttpResponse::fromBody(is_string($resolved) ? $resolved : null);
                     }
                 }
-                return null;
+                return HttpResponse::failure();
             }
         };
 
