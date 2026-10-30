@@ -230,6 +230,61 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
         $plugin->drainOne();
     }
 
+    /**
+     * M-MUSICBRAINZ-12: host metadata_json is open-ended mixed (ID3-style
+     * multi-value tags persist as arrays). Before the boundary parse, an
+     * array artist/duration flowed raw into strict_types ?string/?int params
+     * and killed the drain with a TypeError. After it, non-conforming values
+     * parse away and enrichment proceeds with what survives.
+     */
+    public function testEnrichItemSurvivesWronglyTypedHostMetadata(): void
+    {
+        $repo = $this->createMock(ItemRepository::class);
+        $repo->method('findById')->willReturn([
+            'id' => 'item-1',
+            'name' => 'Test Track',
+            'type' => 'track',
+            'path' => '/music/a.flac',
+            'metadata' => [
+                'artist' => ['First Name', 'Second Name'],
+                'album' => 42,
+                'duration' => ['not', 'a', 'number'],
+                'isrc' => ['USRC12345678'],
+            ],
+        ]);
+        $repo->expects($this->never())->method('update');
+
+        $plugin = $this->enabledPlugin();
+        $client = $this->countingClient([]);
+        $this->injectApi($plugin, new MusicBrainzApi($client, self::VALID_UA, 0));
+        $plugin->onEnable($this->container($repo));
+
+        $result = $plugin->enrichItem('item-1');
+
+        $this->assertNotNull($result, 'Wrongly-typed host metadata must degrade to null, never throw.');
+        $this->assertFalse($result->hasData());
+    }
+
+    /**
+     * M-MUSICBRAINZ-12 (drain guard): a throw inside enrichItem must abort
+     * only the one item. drainOne() swallows+logs and reports the dispatch,
+     * so the Workerman timer chain survives a poisoned item.
+     */
+    public function testDrainOneSurvivesEnrichmentThrowAndKeepsTheTimerAlive(): void
+    {
+        $repo = $this->createMock(ItemRepository::class);
+        $repo->method('findById')->willThrowException(new \RuntimeException('DB exploded'));
+
+        $plugin = $this->enabledPlugin();
+        $this->injectApi($plugin, new MusicBrainzApi($this->countingClient([]), self::VALID_UA, 0));
+        $plugin->onEnable($this->container($repo));
+
+        $plugin->onMediaItemAdded(new MediaItemAdded('item-1', 'lib-1', '/music/a.flac', 'track'));
+
+        $this->assertTrue($plugin->drainOne(), 'Dispatched item must report true even when its leg exploded.');
+        $this->assertSame(0, $plugin->queueSize());
+    }
+
     public function testOnEnablePerformsZeroHttp(): void
     {
         $client = $this->countingClient($this->recordingMatchResponses());

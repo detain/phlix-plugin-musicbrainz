@@ -205,7 +205,17 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             return false;
         }
 
-        $this->enrichItem($itemId);
+        try {
+            $this->enrichItem($itemId);
+        } catch (\Throwable $throwable) {
+            // A poisoned item (host DB hiccup, unexpected row shape) must abort
+            // only its own leg: the Workerman timer chain that calls drainOne()
+            // would otherwise die silently and the queue would stagnate.
+            $this->logger?->error('MusicBrainz: enrichment leg failed; item dropped, drain continues', [
+                'media_item_id' => $itemId,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
 
         return true;
     }
@@ -247,10 +257,10 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             return null;
         }
 
-        $artist = $mediaItem->metadata['artist'] ?? null;
-        $album = $mediaItem->metadata['album'] ?? null;
-        $duration = isset($mediaItem->metadata['duration']) ? (int)$mediaItem->metadata['duration'] : null;
-        $isrc = $mediaItem->metadata['isrc'] ?? null;
+        $artist = self::stringMeta($mediaItem->metadata['artist'] ?? null);
+        $album = self::stringMeta($mediaItem->metadata['album'] ?? null);
+        $duration = self::intMeta($mediaItem->metadata['duration'] ?? null);
+        $isrc = self::stringMeta($mediaItem->metadata['isrc'] ?? null);
 
         $result = $this->enricher->enrich($title, $artist, $album, $duration, $isrc);
 
@@ -294,6 +304,47 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         $metadata['musicbrainz'] = $enriched;
 
         $this->itemRepository->update($itemId, ['metadata_json' => $metadata]);
+    }
+
+    /**
+     * Parse one host-metadata value at the enrichment boundary.
+     *
+     * `metadata_json` is open-ended mixed: ID3-style multi-value tags persist
+     * as ARRAYS, and any scalar type can appear. Handing that raw to the
+     * enricher's strict `?string` params used to kill the whole drain leg with
+     * a TypeError. Non-conforming (or blank) values parse away to null —
+     * enrichment then proceeds with whatever genuinely survives.
+     */
+    private static function stringMeta(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        // Cap the search term; prefer a UTF-8-safe codepoint slice.
+        if (preg_match('/^.{0,512}/u', $value, $match) === 1) {
+            return $match[0];
+        }
+
+        return strlen($value) > 512 ? substr($value, 0, 512) : $value;
+    }
+
+    /**
+     * Parse one host-metadata duration at the enrichment boundary: only a
+     * non-boolean scalar that is numeric survives the cast to int.
+     */
+    private static function intMeta(mixed $value): ?int
+    {
+        if (is_bool($value) || !is_scalar($value)) {
+            return null;
+        }
+
+        return is_numeric($value) ? (int)$value : null;
     }
 
     /**
