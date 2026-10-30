@@ -1,8 +1,16 @@
-includes:
-    - phpstan.baseline.neon
-
 parameters:
     level: 9
     paths:
         - src
+    bootstrapFiles:
+        - vendor/autoload.php
+        # The plugin talks to host-supplied classes that are deliberately not
+        # composer dependencies (phlix-server's library model + the resident
+        # Workerman HTTP client). PHPStan analyzes them through the same
+        # verbatim-shape stubs the runtime guards hide behind, which keeps the
+        # whole of src/ at level 9 with zero baseline entries
+        # (M-MUSICBRAINZ-21, myanimelist-plugin model).
+        - tests/Stub/PhlixMediaItem.php
+        - tests/Stub/PhlixItemRepository.php
+        - tests/Stub/WorkermanHttpClient.php
     treatPhpDocTypesAsCertain: false

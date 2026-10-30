@@ -54,7 +54,7 @@ use Psr\Log\NullLogger;
  * drain, and only through the non-blocking {@see HttpClient}.
  *
  * @package Phlix\Plugin\MusicBrainz
- * @since 0.14.0
+ * @since 0.1.0
  */
 final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterface
 {
@@ -247,7 +247,10 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             return null;
         }
 
-        $title = $mediaItem->name ?? '';
+        // MediaItem::$name is typed non-nullable on the host class (stubs
+        // mirror it verbatim); the empty-title early exit below is the real
+        // guard — the old `?? ''` was dead weight on a string (M-MUSICBRAINZ-21).
+        $title = $mediaItem->name;
         if ($title === '') {
             return null;
         }
@@ -298,7 +301,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
 
         $enriched = $result->toArray();
 
-        $metadata = is_array($mediaItem->metadata) ? $mediaItem->metadata : [];
+        $metadata = $mediaItem->metadata;
         $prior = is_array($metadata['musicbrainz'] ?? null) ? $metadata['musicbrainz'] : [];
 
         foreach (['artist', 'album', 'tracks'] as $section) {

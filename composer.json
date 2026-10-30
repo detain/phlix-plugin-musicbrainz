@@ -8,6 +8,7 @@
     "require": {
         "php": ">=8.3",
         "detain/phlix-shared": "^0.52.0",
+        "ext-curl": "*",
         "psr/container": "^1.1 || ^2.0",
         "psr/log": "^1.0 || ^2.0 || ^3.0"
     },

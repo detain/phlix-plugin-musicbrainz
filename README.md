@@ -57,11 +57,21 @@ All settings are optional — MusicBrainz is an open service, so no API key is r
 ```bash
 composer install
 vendor/bin/phpunit
-vendor/bin/phpstan analyse -c phpstan.neon
+vendor/bin/phpstan analyse -c phpstan.neon   # level 9, zero baseline entries
 vendor/bin/phpcs src --standard=PSR12
 # audits the whole composer.lock (require AND require-dev); the composer-audit CI job runs this
 php scripts/security-audit-check.php
 ```
+
+Requirements: PHP >= 8.3 with `ext-curl` (declared in `composer.json`) — curl
+is the documented CLI/test fallback transport only; inside the resident
+Workerman server process the plugin uses the host's `Workerman\Http\Client`
+instead (soft dependency, `class_exists`-guarded). Host-supplied classes the
+plugin talks to through the DI container (`Phlix\Media\Library\*`,
+`Workerman\Http\Client`, `Workerman\Timer`) are deliberately not composer
+dependencies; PHPStan resolves them through verbatim-shape stubs under
+`tests/Stub/` wired via `bootstrapFiles`, so the level 9 gate runs clean with
+no `ignoreErrors` and no baseline file (M-MUSICBRAINZ-10/21).
 
 The entry class is `Phlix\Plugin\MusicBrainz\MusicBrainzPlugin` (implements
 `Phlix\Shared\Plugin\LifecycleInterface` and

@@ -17,7 +17,7 @@ namespace Phlix\Plugin\MusicBrainz;
  * Encapsulates all configuration values with validation and defaults.
  *
  * @package Phlix\Plugin\MusicBrainz
- * @since 0.14.0
+ * @since 0.1.0
  */
 final class MusicBrainzSettings
 {

@@ -17,7 +17,7 @@ namespace Phlix\Plugin\MusicBrainz;
  * Carries enriched data returned to the Phlix server for storage.
  *
  * @package Phlix\Plugin\MusicBrainz
- * @since 0.14.0
+ * @since 0.1.0
  */
 final class MetadataEnrichmentResult
 {

@@ -375,7 +375,7 @@ final class MusicBrainzApi
      * @param string $query Artist name to search for
      * @param int $limit Maximum number of results (1-100)
      *
-     * @return array<int, array<string, mixed>> Artist results
+     * @return list<array<array-key, mixed>> Artist results (empty = none)
      */
     public function searchArtists(string $query, int $limit = 25): array
     {
@@ -385,7 +385,7 @@ final class MusicBrainzApi
             'fmt' => 'json',
         ]);
 
-        return $response['artists'] ?? [];
+        return self::decodeRows($response['artists'] ?? null);
     }
 
     /**
@@ -394,7 +394,7 @@ final class MusicBrainzApi
      * @param string $query Search query (artist, album, barcode, etc.)
      * @param int $limit Maximum number of results (1-100)
      *
-     * @return array<int, array<string, mixed>> Release results
+     * @return list<array<array-key, mixed>> Release results (empty = none)
      */
     public function searchReleases(string $query, int $limit = 25): array
     {
@@ -404,7 +404,7 @@ final class MusicBrainzApi
             'fmt' => 'json',
         ]);
 
-        return $response['releases'] ?? [];
+        return self::decodeRows($response['releases'] ?? null);
     }
 
     /**
@@ -413,7 +413,7 @@ final class MusicBrainzApi
      * @param string $query Track name, artist, isrc, etc.
      * @param int $limit Maximum number of results (1-100)
      *
-     * @return array<int, array<string, mixed>> Recording results
+     * @return list<array<array-key, mixed>> Recording results (empty = none)
      */
     public function searchRecordings(string $query, int $limit = 25): array
     {
@@ -423,7 +423,7 @@ final class MusicBrainzApi
             'fmt' => 'json',
         ]);
 
-        return $response['recordings'] ?? [];
+        return self::decodeRows($response['recordings'] ?? null);
     }
 
     /**
@@ -432,11 +432,11 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz artist ID
      * @param array<string> $inc Additional includes (aliases, tags, genres, etc.)
      *
-     * @return array<string, mixed>|null Artist details, or null when the
+     * @return array<array-key, mixed>|null Artist details, or null when the
      *   artist does not exist OR the lookup failed (non-2xx, invalid JSON,
-     *   transport error) — the failure modes are indistinguishable from a
-     *   miss at this boundary (M-MUSICBRAINZ-04); transport/JSON failures are
-     *   logged, plain HTTP failures are not distinguishable here.
+     *   transport error) — indistinguishable from a miss at this boundary
+     *   (M-MUSICBRAINZ-04); transport/JSON failures are logged, plain HTTP
+     *   failures are not distinguishable here.
      *
      * @since 0.4.1 the default include vocabulary is live-verified: ws/2
      * rejects `genre` (singular) with HTTP 400 "genre is not a valid inc
@@ -451,7 +451,7 @@ final class MusicBrainzApi
             'inc' => implode('+', $inc),
         ]);
 
-        return $response['id'] ?? null ? $response : null;
+        return self::hasEntityId($response) ? $response : null;
     }
 
     /**
@@ -460,7 +460,7 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz release ID
      * @param array<string> $inc Additional includes (recordings, artist-rels, etc.)
      *
-     * @return array<string, mixed>|null Release details, or null when the
+     * @return array<array-key, mixed>|null Release details, or null when the
      *   release does not exist OR the lookup failed (non-2xx, invalid JSON,
      *   transport error) — indistinguishable at this boundary
      *   (M-MUSICBRAINZ-04); transport/JSON failures are logged.
@@ -472,7 +472,7 @@ final class MusicBrainzApi
             'inc' => implode('+', $inc),
         ]);
 
-        return $response['id'] ?? null ? $response : null;
+        return self::hasEntityId($response) ? $response : null;
     }
 
     /**
@@ -481,7 +481,7 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz recording ID
      * @param array<string> $inc Additional includes (artist-rels, releases, etc.)
      *
-     * @return array<string, mixed>|null Recording details, or null when the
+     * @return array<array-key, mixed>|null Recording details, or null when the
      *   recording does not exist OR the lookup failed (non-2xx, invalid
      *   JSON, transport error) — indistinguishable at this boundary
      *   (M-MUSICBRAINZ-04); transport/JSON failures are logged.
@@ -493,7 +493,7 @@ final class MusicBrainzApi
             'inc' => implode('+', $inc),
         ]);
 
-        return $response['id'] ?? null ? $response : null;
+        return self::hasEntityId($response) ? $response : null;
     }
 
     /**
@@ -501,7 +501,7 @@ final class MusicBrainzApi
      *
      * @param string $releaseMbid MusicBrainz release ID
      *
-     * @return array<int, array<string, mixed>>|null List of images, or null
+     * @return list<array<array-key, mixed>>|null List of images, or null
      *   when the release has no art OR the fetch failed (non-2xx, invalid
      *   JSON, transport error) — indistinguishable at this boundary
      *   (M-MUSICBRAINZ-04); only transport errors are logged here.
@@ -523,7 +523,7 @@ final class MusicBrainzApi
                 return null;
             }
 
-            return $data['images'] ?? null;
+            return is_array($data['images'] ?? null) ? self::decodeRows($data['images']) : null;
         } catch (\Throwable $e) {
             $this->logger->warning('MusicBrainz: failed to fetch cover art', [
                 'release_mbid' => $releaseMbid,
@@ -669,12 +669,72 @@ final class MusicBrainzApi
     }
 
     /**
+     * Decode a JSON body into an object-shaped array, parsing away shapes
+     * the contract vocabulary cannot express (non-array payloads collapse
+     * to []). JSON object keys are always string or int after assoc decode,
+     * so the filtered result is honestly typed.
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function decodeObject(mixed $decoded): array
+    {
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $object = [];
+        foreach ($decoded as $key => $value) {
+            $object[$key] = $value;
+        }
+
+        return $object;
+    }
+
+    /**
+     * Parse a JSON list of entity rows into a trusted list; anything that is
+     * not an array of objects drops row-by-row (hostile shapes degrade, they
+     * never flow into persistence).
+     *
+     * @return list<array<array-key, mixed>>
+     */
+    private static function decodeRows(mixed $rows): array
+    {
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $list = [];
+        foreach ($rows as $row) {
+            if (is_array($row)) {
+                $list[] = $row;
+            }
+        }
+
+        return $list;
+    }
+
+    /**
+     * A resource response is only trusted when it carries a non-empty string
+     * `id` — the same law the old inline `?? null ?` ternary expressed, made
+     * readable (M-MUSICBRAINZ-18).
+     *
+     * @param array<array-key, mixed> $response
+     */
+    private static function hasEntityId(array $response): bool
+    {
+        $id = $response['id'] ?? null;
+
+        return is_string($id) && $id !== '';
+    }
+
+    /**
      * Perform a GET request to the MusicBrainz API.
      *
      * @param string $path API path (e.g., /artist, /release)
      * @param array<string, mixed> $query Query parameters
      *
-     * @return array<string, mixed> JSON response as array
+     * @return array<array-key, mixed> JSON payload as a decoded object;
+     *   empty array on any failure (see M-MUSICBRAINZ-04 collapse law).
      */
     private function get(string $path, array $query = []): array
     {
@@ -701,7 +761,7 @@ final class MusicBrainzApi
                 return [];
             }
 
-            return $data;
+            return self::decodeObject($data);
         } catch (\Throwable $e) {
             $this->logger->warning('MusicBrainz: API request failed', [
                 'path' => $path,

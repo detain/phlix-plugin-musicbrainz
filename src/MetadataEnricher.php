@@ -21,7 +21,7 @@ use Psr\Log\NullLogger;
  * and assembles enrichment results.
  *
  * @package Phlix\Plugin\MusicBrainz
- * @since 0.14.0
+ * @since 0.1.0
  */
 final class MetadataEnricher
 {
@@ -218,7 +218,9 @@ final class MetadataEnricher
     /**
      * Select the best recording from search results.
      *
-     * @param array<int, array<string, mixed>> $results
+     * @param list<array<array-key, mixed>> $results
+     *
+     * @return array<array-key, mixed>|null
      */
     private function selectBestRecording(
         array $results,
@@ -269,6 +271,10 @@ final class MetadataEnricher
      * parsed here: strings are scrubbed of control/format characters and
      * length-capped, numerics must be numeric, so nothing hostile can be
      * persisted verbatim into `metadata_json`.
+     *
+     * @param array<array-key, mixed> $recording
+     *
+     * @return array<string, mixed>
      */
     private function extractRecordingData(array $recording): array
     {
@@ -386,11 +392,18 @@ final class MetadataEnricher
      * consumers doing SQL `DATE()`, month arithmetic, or strict
      * 'Y-m-d' parsing on the column must tolerate (or normalize) the
      * partial shapes first (M-MUSICBRAINZ-24).
+     *
+     * @return array<string, mixed> Empty on miss or failed lookup.
      */
     private function fetchAlbumData(string $mbid): array
     {
         $release = $this->api->getRelease($mbid);
         if ($release === null) {
+            $this->logger->info('MusicBrainz: release lookup produced no data', [
+                'mbid' => $mbid,
+                'note' => 'genuine miss and failed lookup are indistinguishable (M-MUSICBRAINZ-04)',
+            ]);
+
             return [];
         }
 
@@ -429,11 +442,18 @@ final class MetadataEnricher
      * the `begin-area`/`end-area` objects are PLACE NAMES and are persisted
      * under their own `begin_area`/`end_area` keys. The old mapping stored
      * area names (e.g. "New York") under `begin_date`/`end_date`.
+     *
+     * @return array<string, mixed> Empty on miss or failed lookup.
      */
     private function fetchArtistData(string $mbid): array
     {
         $artist = $this->api->getArtist($mbid);
         if ($artist === null) {
+            $this->logger->info('MusicBrainz: artist lookup produced no data', [
+                'mbid' => $mbid,
+                'note' => 'genuine miss and failed lookup are indistinguishable (M-MUSICBRAINZ-04)',
+            ]);
+
             return [];
         }
 
@@ -466,7 +486,7 @@ final class MetadataEnricher
      * First row of a nested list (e.g. `artist-credit[0]`) as an array,
      * or an empty array when the path does not describe a row.
      *
-     * @param array<string, mixed> $row
+     * @param array<array-key, mixed> $row
      * @return array<array-key, mixed>
      */
     private static function rowAt(array $row, string $key, int $index): array

@@ -111,6 +111,14 @@ final class HttpClient implements HttpClientInterface
      */
     private function getBlocking(string $url, array $headers): HttpResponse
     {
+        // Fail-loud guard at the transport boundary: an empty URL is never a
+        // legal request, and the early exit also pins the non-empty-string
+        // shape curl_setopt_array's option-map contract requires (no baseline
+        // entry for it, M-MUSICBRAINZ-21).
+        if ($url === '') {
+            return HttpResponse::failure();
+        }
+
         $ch = curl_init();
         if ($ch === false) {
             return HttpResponse::failure();
@@ -118,7 +126,14 @@ final class HttpClient implements HttpClientInterface
 
         /** @var array<string, string> $responseHeaders */
         $responseHeaders = [];
-        $userAgent = $headers['User-Agent'] ?? 'PhlixMusicBrainzPlugin/0.1.0';
+        // A blank User-Agent would violate the MusicBrainz etiquette contract
+        // AND curl_setopt_array's non-empty-string option shape; the default
+        // identity below keeps the request legal (single-source is owed by
+        // M-MUSICBRAINZ-09/19, batch W-min67).
+        $userAgent = $headers['User-Agent'] ?? '';
+        if ($userAgent === '') {
+            $userAgent = 'PhlixMusicBrainzPlugin/0.1.0';
+        }
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
