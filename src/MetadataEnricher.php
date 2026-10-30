@@ -44,6 +44,12 @@ final class MetadataEnricher
      *
      * Searches for matching artist/album/track and fetches additional data.
      *
+     * A section coming back empty does NOT necessarily mean "no match":
+     * the underlying lookups also collapse to null on HTTP/transport/JSON
+     * failure (see MusicBrainzApi::getArtist() et al., M-MUSICBRAINZ-04),
+     * so failed legs and genuine misses are indistinguishable here. The
+     * caller's merge-on-persist keeps earlier good data in that case.
+     *
      * @param string $title Track or album title
      * @param string|null $artist Artist name (optional for fast search)
      * @param string|null $album Album name (optional)
@@ -389,6 +395,11 @@ final class MetadataEnricher
         }
 
         $labelInfo = self::rowAt($release, 'label-info', 0);
+        // M-MUSICBRAINZ-01: the live release schema nests the imprint under
+        // label-info[0].label.name — the row itself has no top-level 'name',
+        // so the old read was null on every real response (the flat shape is
+        // kept as a fallback for hand-shaped fixtures/tests).
+        $labelEntity = is_array($labelInfo['label'] ?? null) ? $labelInfo['label'] : [];
         $credit = self::rowAt($release, 'artist-credit', 0);
         $creditArtist = is_array($credit['artist'] ?? null) ? $credit['artist'] : [];
         $credits = self::artistCredits($release);
@@ -399,7 +410,7 @@ final class MetadataEnricher
             'date' => self::strField($release, 'date', 32),
             'country' => self::strField($release, 'country', 16),
             'barcode' => self::strField($release, 'barcode', 64),
-            'label' => self::strField($labelInfo, 'name'),
+            'label' => self::strField($labelEntity, 'name') ?? self::strField($labelInfo, 'name'),
             'catalog_number' => self::strField($labelInfo, 'catalog-number', 64),
             'media_format' => self::strField($release, 'media-format'),
             'asin' => self::strField($release, 'asin', 32),
@@ -442,6 +453,10 @@ final class MetadataEnricher
             'begin_area' => self::strField($beginArea, 'name'),
             'end_area' => self::strField($endArea, 'name'),
             'disambiguation' => self::strField($artist, 'disambiguation'),
+            // M-MUSICBRAINZ-01: getArtist already requests the `aliases`
+            // inc — the README promised the names, the mapping now ships them
+            // (scrubbed and bounded, same parser as tags/genres).
+            'aliases' => self::nameList($artist['aliases'] ?? null),
             'tags' => self::nameList($artist['tags'] ?? null),
             'genres' => self::nameList($artist['genres'] ?? null),
         ];

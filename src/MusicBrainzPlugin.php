@@ -59,11 +59,6 @@ use Psr\Log\NullLogger;
 final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterface
 {
     /**
-     * Plugin type identifier used in the plugin manifest.
-     */
-    public const PLUGIN_TYPE = 'metadata';
-
-    /**
      * Media-item types this plugin enriches. `track` is the concrete
      * `media_items.type` the scanner assigns to music files (the value
      * carried by {@see MediaItemAdded::$type}); the others are accepted

@@ -11,10 +11,15 @@
 Connects a Phlix server to [MusicBrainz](https://musicbrainz.org/) to enrich
 music items with comprehensive metadata:
 
-- **Artist metadata** — names, aliases, country,begin/end dates, genres, tags
-- **Album metadata** — release date, label, catalog number, barcode, genres
-- **Track metadata** — track number, disc number, duration, ISRC codes
-- **Album artwork** — fetched from the Cover Art Archive API
+- **Artist metadata** — name, sort name, aliases, type, country, begin/end
+  dates and areas, disambiguation, tags, genres
+- **Album metadata** — release date, country, label, catalog number, barcode,
+  media format, ASIN, full artist credit (featured artists and joinphrases)
+- **Track metadata** — track number, position, duration, ISRC codes, full
+  artist credit
+- **Album artwork** — the front cover is fetched from the Cover Art Archive;
+  item metadata persists an `album_art` presence marker (the image bytes
+  themselves need a dedicated host-side artwork ingestion hook)
 
 It subscribes to `phlix.library.item.added` and enqueues each item in
 `src/EnrichmentQueue.php`, so enrichment runs deferred and throttled instead of

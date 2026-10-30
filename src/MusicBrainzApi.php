@@ -432,7 +432,11 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz artist ID
      * @param array<string> $inc Additional includes (aliases, tags, genres, etc.)
      *
-     * @return array<string, mixed>|null Artist details or null if not found
+     * @return array<string, mixed>|null Artist details, or null when the
+     *   artist does not exist OR the lookup failed (non-2xx, invalid JSON,
+     *   transport error) — the failure modes are indistinguishable from a
+     *   miss at this boundary (M-MUSICBRAINZ-04); transport/JSON failures are
+     *   logged, plain HTTP failures are not distinguishable here.
      *
      * @since 0.4.1 the default include vocabulary is live-verified: ws/2
      * rejects `genre` (singular) with HTTP 400 "genre is not a valid inc
@@ -456,7 +460,10 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz release ID
      * @param array<string> $inc Additional includes (recordings, artist-rels, etc.)
      *
-     * @return array<string, mixed>|null Release details or null if not found
+     * @return array<string, mixed>|null Release details, or null when the
+     *   release does not exist OR the lookup failed (non-2xx, invalid JSON,
+     *   transport error) — indistinguishable at this boundary
+     *   (M-MUSICBRAINZ-04); transport/JSON failures are logged.
      */
     public function getRelease(string $mbid, array $inc = ['recordings', 'artist-rels', 'release-rels']): ?array
     {
@@ -474,7 +481,10 @@ final class MusicBrainzApi
      * @param string $mbid MusicBrainz recording ID
      * @param array<string> $inc Additional includes (artist-rels, releases, etc.)
      *
-     * @return array<string, mixed>|null Recording details or null if not found
+     * @return array<string, mixed>|null Recording details, or null when the
+     *   recording does not exist OR the lookup failed (non-2xx, invalid
+     *   JSON, transport error) — indistinguishable at this boundary
+     *   (M-MUSICBRAINZ-04); transport/JSON failures are logged.
      */
     public function getRecording(string $mbid, array $inc = ['artist-rels', 'releases']): ?array
     {
@@ -491,7 +501,10 @@ final class MusicBrainzApi
      *
      * @param string $releaseMbid MusicBrainz release ID
      *
-     * @return array<int, array<string, mixed>>|null List of images or null if none found
+     * @return array<int, array<string, mixed>>|null List of images, or null
+     *   when the release has no art OR the fetch failed (non-2xx, invalid
+     *   JSON, transport error) — indistinguishable at this boundary
+     *   (M-MUSICBRAINZ-04); only transport errors are logged here.
      */
     public function getCoverArt(string $releaseMbid): ?array
     {
@@ -531,7 +544,10 @@ final class MusicBrainzApi
      *
      * @param string $releaseMbid MusicBrainz release ID
      *
-     * @return string|null Base64-encoded image data or null
+     * @return string|null Base64-encoded image data, or null when the
+     *   release has no art, the archive fetch failed (see
+     *   {@see getCoverArt()}, M-MUSICBRAINZ-04) or the image URL was
+     *   refused by the host allowlist.
      */
     public function getFrontCover(string $releaseMbid): ?string
     {
