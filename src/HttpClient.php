@@ -22,8 +22,11 @@ namespace Phlix\Plugin\MusicBrainz;
  * async and the caller yields to the event loop until the callback fires.
  *
  * Outside a Workerman runtime (plain CLI, PHPUnit) that class is absent, so a
- * blocking cURL fallback is used. Unit tests inject their own
- * {@see HttpClientInterface} mock and never touch either transport.
+ * blocking cURL fallback is used. API-layer tests inject their own
+ * {@see HttpClientInterface} mock; {@see \Phlix\Tests\Unit\Plugin\MusicBrainz\HttpClientTest}
+ * additionally drives the blocking cURL fallback for real over a local
+ * `php -S` fixture server (tests/Fixture/transport_router.php) — the suite
+ * never dials an external host.
  *
  * @package Phlix\Plugin\MusicBrainz
  */
