@@ -13,9 +13,15 @@ jobs:
       - name: Dispatch to phlix-plugins catalog
         env:
           GH_TOKEN: ${{ secrets.PHLIX_BOT_TOKEN }}
+          # M-MUSICBRAINZ-14: GitHub expressions are injected into the shell
+          # verbatim — route them through env so refs/SHAs can never break out
+          # of quoting (script-injection hardening, family law).
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           gh api repos/detain/phlix-plugins/dispatches \
             --field event_type=plugin-push \
-            --field "client_payload[ref]=${{ github.ref }}" \
-            --field "client_payload[sha]=${{ github.sha }}" \
-            --field "client_payload[repo]=${{ github.repository }}"
+            --field "client_payload[ref]=$REF" \
+            --field "client_payload[sha]=$SHA" \
+            --field "client_payload[repo]=$REPOSITORY"
