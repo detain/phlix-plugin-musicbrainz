@@ -1,9 +1,9 @@
 {
     "name": "detain/phlix-plugin-musicbrainz",
     "type": "phlix-plugin",
-    "description": "MusicBrainz metadata provider for Phlix — artist/album/track metadata, album art, and AcoustID integration.",
+    "description": "MusicBrainz metadata provider for Phlix — artist/album/track metadata and album art from the Cover Art Archive.",
     "license": "MIT",
-    "keywords": ["phlix", "phlix-plugin", "musicbrainz", "music", "metadata", "metadata-provider", "audio", "albums", "artists", "tracks", "acoustid", "discography"],
+    "keywords": ["phlix", "phlix-plugin", "musicbrainz", "music", "metadata", "metadata-provider", "audio", "albums", "artists", "tracks", "discography"],
     "homepage": "https://github.com/detain/phlix-plugin-musicbrainz",
     "require": {
         "php": ">=8.3",
