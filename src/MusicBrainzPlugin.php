@@ -74,6 +74,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     private EnrichmentQueue $queue;
     private bool $enabled = false;
     private bool $drainTimerStarted = false;
+    private ?int $drainTimerId = null;
 
     /**
      * @param MusicBrainzSettings|null $settings Initial settings (loaded from DB on enable)
@@ -101,7 +102,12 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     public function configure(array $settings): void
     {
         $this->settings = MusicBrainzSettings::fromArray($settings);
-        $this->enabled = ($settings['enabled'] ?? false) === true;
+        // M-MUSICBRAINZ-26: one enabled-truth. The settings object already
+        // normalises the raw value with a (bool) cast; re-reading the raw
+        // array with a strict === true compare gave plugin and settings a
+        // split vote for any truthy non-bool (e.g. 1) — the plugin stayed
+        // dead while the admin UI showed it enabled.
+        $this->enabled = $this->settings->enabled;
 
         // M-MUSICBRAINZ-25: a settings save rebuilds the throttle/spacing,
         // but the pending backlog is USER work — dropping it meant every
@@ -151,6 +157,22 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
      */
     public function onDisable(): void
     {
+        // M-MUSICBRAINZ-26: disabling a resident plugin used to leak the
+        // drain timer — it kept ticking drainOne() forever, and the armed
+        // flag stayed set so a later re-enable could not re-arm cleanly.
+        // Tear the timer down (when its id was captured and a loop is
+        // alive), reset the arming state and clear the enabled bit.
+        if ($this->drainTimerId !== null && class_exists(\Workerman\Timer::class)) {
+            try {
+                \Workerman\Timer::del($this->drainTimerId);
+            } catch (\Throwable) {
+                // No live event loop — the timer died with its worker.
+            }
+        }
+
+        $this->drainTimerId = null;
+        $this->drainTimerStarted = false;
+        $this->enabled = false;
         $this->itemRepository = null;
         $this->logger?->info('MusicBrainz: plugin disabled');
     }
@@ -434,12 +456,13 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         }
 
         try {
-            \Workerman\Timer::add(
+            $timerId = \Workerman\Timer::add(
                 $this->queue->minIntervalSeconds(),
                 function (): void {
                     $this->drainOne();
                 }
             );
+            $this->drainTimerId = is_int($timerId) ? $timerId : null;
             $this->drainTimerStarted = true;
         } catch (\Throwable) {
             // Not inside a Workerman event loop — drain must be driven manually.
