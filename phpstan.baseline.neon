@@ -13,7 +13,7 @@ parameters:
 			path: src/HttpClient.php
 
 		-
-			message: '#^Parameter \#2 \$options of function curl_setopt_array expects array\{10002\: non\-empty\-string, 19913\: bool, 13\: int, 52\: bool, 68\: int, 10023\: array\<int, string\>, 10018\: non\-empty\-string\}, array\{10002\: string, 19913\: true, 13\: int, 52\: true, 68\: 3, 10023\: array\<int, string\>, 10018\: string\} given\.$#'
+			message: '#^Parameter \#2 \$options of function curl_setopt_array expects array\{10002\: non\-empty\-string, 19913\: bool, 13\: int, 181\: int, 182\: int, 52\: bool, 68\: int, 10023\: array\<int, string\>, \.\.\.\}, array\{10002\: string, 19913\: true, 13\: int, 181\: 3, 182\: 3, 52\: true, 68\: 3, 10023\: array\<int, string\>, \.\.\.\} given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/HttpClient.php
@@ -82,12 +82,6 @@ parameters:
 			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:searchReleases\(\) should return array\<int, array\<string, mixed\>\> but returns mixed\.$#'
 			identifier: return.type
 			count: 1
-			path: src/MusicBrainzApi.php
-
-		-
-			message: '#^Parameter \#1 \$url of method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:fetchImage\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 3
 			path: src/MusicBrainzApi.php
 
 		-

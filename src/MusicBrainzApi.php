@@ -373,13 +373,27 @@ final class MusicBrainzApi
     /**
      * Fetch an image and return as base64.
      *
-     * @param string $url Image URL
+     * The candidate URL arrives from the Cover Art Archive RESPONSE BODY —
+     * untrusted remote data. It is parsed here and only ever fetched when it
+     * is an https URL on coverartarchive.org (or a subdomain): a hostile or
+     * compromised art listing cannot aim the plugin's transport at internal
+     * hosts, other schemes, or the local filesystem.
+     *
+     * @param mixed $url Image URL candidate
      *
      * @return string|null Base64-encoded image or null
      */
-    private function fetchImage(string $url): ?string
+    private function fetchImage(mixed $url): ?string
     {
-        if ($url === '') {
+        if (!is_string($url) || $url === '') {
+            return null;
+        }
+
+        if (!self::isSafeCoverArtUrl($url)) {
+            $this->logger->warning('MusicBrainz: refused non-coverart image URL', [
+                'url' => substr($url, 0, 256),
+            ]);
+
             return null;
         }
 
@@ -398,6 +412,22 @@ final class MusicBrainzApi
 
             return null;
         }
+    }
+
+    /**
+     * True only for https URLs whose host is the Cover Art Archive domain
+     * itself or a subdomain of it (exact or suffix host match).
+     */
+    private static function isSafeCoverArtUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https') {
+            return false;
+        }
+
+        $host = strtolower((string)($parts['host'] ?? ''));
+
+        return $host === 'coverartarchive.org' || str_ends_with($host, '.coverartarchive.org');
     }
 
     /**

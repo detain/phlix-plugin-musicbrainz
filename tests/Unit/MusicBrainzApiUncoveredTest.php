@@ -155,16 +155,17 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         $httpClient = new class implements HttpClientInterface {
             public function get(string $url, array $headers = [], array $query = []): ?string
             {
+                // Image URLs are on-host (https *.coverartarchive.org), so the
+                // binary branch must be checked before the list branch.
+                if (str_contains($url, '/image-7')) {
+                    return 'fake-image-binary-data';
+                }
                 if (str_contains($url, 'coverartarchive.org')) {
                     return json_encode([
                         'images' => [
-                            ['front' => false, 'types' => ['Primary'], 'image' => 'http://example.com/primary.jpg'],
+                            ['front' => false, 'types' => ['Primary'], 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-7'],
                         ],
                     ]);
-                }
-                // fetchImage call - return binary data that will be base64 encoded
-                if (str_contains($url, 'example.com')) {
-                    return 'fake-image-binary-data';
                 }
                 return null;
             }
@@ -185,14 +186,17 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         $httpClient = new class implements HttpClientInterface {
             public function get(string $url, array $headers = [], array $query = []): ?string
             {
+                if (str_contains($url, '/image-9')) {
+                    return 'fake-image-data';
+                }
                 if (str_contains($url, 'coverartarchive.org')) {
                     return json_encode([
                         'images' => [
-                            ['front' => false, 'image' => 'http://example.com/first.jpg'],
+                            ['front' => false, 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-9'],
                         ],
                     ]);
                 }
-                return 'fake-image-data';
+                return null;
             }
         };
 

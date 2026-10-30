@@ -23,10 +23,13 @@ final class MetadataEnricherAlbumArtTest extends TestCase
      * Creates a mock HTTP client with URL pattern matching.
      *
      * IMPORTANT: Patterns are matched in the order they appear in the array.
-     * Put "coverartarchive.org" BEFORE "/release/release-mbid-xxx" patterns
-     * because str_contains(url, "/release/release-mbid-xxx") would incorrectly
-     * match "https://coverartarchive.org/release/mbid-xxx" before the shorter
-     * "coverartarchive.org" pattern would be checked.
+     * Image-binary patterns ("/image-NNN") come FIRST — image URLs live on
+     * the coverartarchive host itself (the plugin only ever fetches https
+     * *.coverartarchive.org), so their substring would otherwise be shadowed
+     * by the "coverartarchive.org" list pattern. That list pattern in turn
+     * must precede "/release/release-mbid-xxx": the list URL
+     * "https://coverartarchive.org/release/mbid-xxx" contains the release
+     * lookup's path substring.
      *
      * @param array<string, string|callable> $responses Map of URL-substring pattern => response
      */
@@ -38,8 +41,9 @@ final class MetadataEnricherAlbumArtTest extends TestCase
 
             public function __construct(array $responses)
             {
-                // Iterate in insertion order — caller must put coverartarchive.org
-                // BEFORE /release/xxx patterns to avoid substring collisions.
+                // Iterate in insertion order — caller must keep the ordering
+                // law from the class docblock (binaries first, then the
+                // coverart list, then narrower path patterns).
                 $this->responses = $responses;
             }
 
@@ -59,13 +63,16 @@ final class MetadataEnricherAlbumArtTest extends TestCase
 
     public function testEnrichWithFetchAlbumArtFindsFrontCover(): void
     {
-        // coverartarchive.org MUST be first to avoid /release/xxx substring collision
+        // Image URLs live on the real Cover Art Archive host (the production
+        // trust boundary only fetches https *.coverartarchive.org), so the
+        // binary pattern must be matched BEFORE the list pattern.
         $api = $this->createMockApi([
+            '/image-132' => 'fake-jpeg-binary-data',
             'coverartarchive.org' => json_encode([
                 'images' => [
                     [
                         'front' => true,
-                        'image' => 'http://coverart.example.com/front.jpg',
+                        'image' => 'https://covers.coverartarchive.org/release/release-mbid-123/image-132',
                         'types' => ['Front'],
                     ],
                 ],
@@ -93,7 +100,6 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                     ['name' => 'Art Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Art Artist']],
                 ],
             ]),
-            'coverart.example.com' => 'fake-jpeg-binary-data',
         ]);
 
         $settings = new MusicBrainzSettings(searchDepth: 'fast', fetchAlbumArt: true);
@@ -110,13 +116,15 @@ final class MetadataEnricherAlbumArtTest extends TestCase
     public function testEnrichWithFetchAlbumArtFindsPrimaryCover(): void
     {
         // When no front=true, it falls back to a "Primary" type image
+        // (image-133 binary pattern first: image URLs are on-host now).
         $api = $this->createMockApi([
+            '/image-133' => 'primary-image-data',
             'coverartarchive.org' => json_encode([
                 'images' => [
                     [
                         'front' => false,
                         'types' => ['Primary'],
-                        'image' => 'http://coverart.example.com/primary.jpg',
+                        'image' => 'https://covers.coverartarchive.org/release/release-mbid-456/image-133',
                     ],
                 ],
             ]),
@@ -143,7 +151,6 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                     ['name' => 'Primary Artist', 'artist' => ['id' => 'artist-mbid-456', 'name' => 'Primary Artist']],
                 ],
             ]),
-            'coverart.example.com' => 'primary-image-data',
         ]);
 
         $settings = new MusicBrainzSettings(searchDepth: 'normal', fetchAlbumArt: true);

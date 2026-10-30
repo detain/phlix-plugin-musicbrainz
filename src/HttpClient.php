@@ -108,6 +108,10 @@ final class HttpClient implements HttpClientInterface
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $this->timeout,
+            // Never let a URL (or a redirect chain) cross into file://,
+            // gopher:// or any other curl transport beyond HTTP(S).
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
