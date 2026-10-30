@@ -232,11 +232,17 @@ final class MusicBrainzApi
      * Get detailed artist information by MusicBrainz ID.
      *
      * @param string $mbid MusicBrainz artist ID
-     * @param array<string> $inc Additional includes (aliases, tags, genre, etc.)
+     * @param array<string> $inc Additional includes (aliases, tags, genres, etc.)
      *
      * @return array<string, mixed>|null Artist details or null if not found
+     *
+     * @since 0.4.1 the default include vocabulary is live-verified: ws/2
+     * rejects `genre` (singular) with HTTP 400 "genre is not a valid inc
+     * parameter for the artist resource." — the plural `genres` is the only
+     * spelling that answers, and the singular default silently zeroed every
+     * default artist lookup (M-MUSICBRAINZ-11).
      */
-    public function getArtist(string $mbid, array $inc = ['aliases', 'tags', 'genre']): ?array
+    public function getArtist(string $mbid, array $inc = ['aliases', 'tags', 'genres']): ?array
     {
         $response = $this->get("/artist/{$mbid}", [
             'fmt' => 'json',

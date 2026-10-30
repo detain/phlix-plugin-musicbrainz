@@ -164,6 +164,68 @@ final class MusicBrainzApiTest extends TestCase
         $this->assertCount(2, $result);
     }
 
+    /**
+     * M-MUSICBRAINZ-11: the ws/2 lookup include vocabulary is plural for
+     * artist genres — live probe (musicbrainz.org, 2026-10-30) answers
+     * `inc=...+genre` with HTTP 400 "genre is not a valid inc parameter for
+     * the artist resource." and `inc=...+genres` with 200 + a genres key.
+     * A wrong default made every default artist lookup silently die.
+     * These pins capture the actual shipped query values.
+     */
+    public function testGetArtistDefaultIncIsThePluralGenresVocabulary(): void
+    {
+        $captured = new class implements HttpClientInterface {
+            public ?string $inc = null;
+
+            public function get(string $url, array $headers = [], array $query = []): ?string
+            {
+                $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
+                return json_encode(['id' => 'mbid-123']);
+            }
+        };
+
+        $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
+        $api->getArtist('mbid-123');
+
+        $this->assertSame('aliases+tags+genres', $captured->inc);
+    }
+
+    public function testGetReleaseDefaultIncMatchesLookupVocabulary(): void
+    {
+        $captured = new class implements HttpClientInterface {
+            public ?string $inc = null;
+
+            public function get(string $url, array $headers = [], array $query = []): ?string
+            {
+                $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
+                return json_encode(['id' => 'mbid-123']);
+            }
+        };
+
+        $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
+        $api->getRelease('mbid-123');
+
+        $this->assertSame('recordings+artist-rels+release-rels', $captured->inc);
+    }
+
+    public function testGetRecordingDefaultIncMatchesLookupVocabulary(): void
+    {
+        $captured = new class implements HttpClientInterface {
+            public ?string $inc = null;
+
+            public function get(string $url, array $headers = [], array $query = []): ?string
+            {
+                $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
+                return json_encode(['id' => 'mbid-123']);
+            }
+        };
+
+        $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
+        $api->getRecording('mbid-123');
+
+        $this->assertSame('artist-rels+releases', $captured->inc);
+    }
+
     public function testRateLimitingDelaysSubsequentCalls(): void
     {
         $callTimes = [];
