@@ -280,4 +280,21 @@ final class MusicBrainzPluginUncoveredTest extends TestCase
         $this->assertInstanceOf(MusicBrainzSettings::class, $plugin->getSettings());
         $this->assertSame(1500, $plugin->getSettings()->rateLimitDelay);
     }
+
+    /**
+     * M-MUSICBRAINZ-32 (style group): the logger property is initialised in
+     * every construction path (`?? new NullLogger()`) and never reassigned
+     * to null, so it must be declared non-nullable — the old
+     * `?LoggerInterface` + six `$this->logger?->` calls implied a null
+     * state that cannot exist (and silently swallowed logging if it ever
+     * did happen).
+     */
+    public function testLoggerPropertyIsDeclaredNonNullable(): void
+    {
+        $type = (new \ReflectionClass(MusicBrainzPlugin::class))->getProperty('logger')->getType();
+
+        $this->assertInstanceOf(\ReflectionNamedType::class, $type);
+        $this->assertFalse($type->allowsNull(), 'A never-null logger must not be declared nullable.');
+        $this->assertSame('Psr\Log\LoggerInterface', $type->getName());
+    }
 }

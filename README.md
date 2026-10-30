@@ -15,7 +15,8 @@ music items with comprehensive metadata:
   dates and areas, disambiguation, tags, genres
 - **Album metadata** — release date, country, label, catalog number, barcode,
   media format, ASIN, full artist credit (featured artists and joinphrases)
-- **Track metadata** — track number, position, duration, ISRC codes, full
+- **Track metadata** — track number, position, duration (`duration_ms`,
+  milliseconds — the host's own `duration` is seconds), ISRC codes, full
   artist credit
 - **Album artwork** — the front cover is fetched from the Cover Art Archive;
   item metadata persists an `album_art` presence marker (the image bytes

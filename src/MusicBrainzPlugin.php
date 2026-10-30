@@ -67,7 +67,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     private const MUSIC_TYPES = ['track', 'album', 'music', 'audio'];
 
     private ?ItemRepository $itemRepository = null;
-    private ?LoggerInterface $logger = null;
+    private LoggerInterface $logger;
     private MusicBrainzSettings $settings;
     private MusicBrainzApi $api;
     private MetadataEnricher $enricher;
@@ -144,7 +144,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         $itemRepo = $container->get(ItemRepository::class);
         $this->itemRepository = $itemRepo instanceof ItemRepository ? $itemRepo : null;
 
-        $this->logger?->info('MusicBrainz: plugin enabled', [
+        $this->logger->info('MusicBrainz: plugin enabled', [
             'user_agent' => $this->settings->userAgent,
             'auto_enrich' => $this->settings->autoEnrich,
             'fetch_album_art' => $this->settings->fetchAlbumArt,
@@ -174,7 +174,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         $this->drainTimerStarted = false;
         $this->enabled = false;
         $this->itemRepository = null;
-        $this->logger?->info('MusicBrainz: plugin disabled');
+        $this->logger->info('MusicBrainz: plugin disabled');
     }
 
     /**
@@ -210,7 +210,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         }
 
         if ($this->queue->enqueue($event->mediaItemId)) {
-            $this->logger?->debug('MusicBrainz: queued media item for enrichment', [
+            $this->logger->debug('MusicBrainz: queued media item for enrichment', [
                 'media_item_id' => $event->mediaItemId,
                 'queue_size' => $this->queue->size(),
             ]);
@@ -239,7 +239,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             // A poisoned item (host DB hiccup, unexpected row shape) must abort
             // only its own leg: the Workerman timer chain that calls drainOne()
             // would otherwise die silently and the queue would stagnate.
-            $this->logger?->error('MusicBrainz: enrichment leg failed; item dropped, drain continues', [
+            $this->logger->error('MusicBrainz: enrichment leg failed; item dropped, drain continues', [
                 'media_item_id' => $itemId,
                 'error' => $throwable->getMessage(),
             ]);
@@ -267,7 +267,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
 
         $row = $this->itemRepository->findById($itemId);
         if ($row === null) {
-            $this->logger?->debug('MusicBrainz: media item not found', [
+            $this->logger->debug('MusicBrainz: media item not found', [
                 'media_item_id' => $itemId,
             ]);
             return null;
@@ -298,7 +298,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         if ($result->hasData()) {
             $this->persist($itemId, $mediaItem, $result);
 
-            $this->logger?->info('MusicBrainz: enriched media item', [
+            $this->logger->info('MusicBrainz: enriched media item', [
                 'media_item_id' => $itemId,
                 'title' => $title,
                 'has_artist' => !empty($result->artistData),

@@ -286,7 +286,11 @@ final class MetadataEnricher
         return [
             'mbid' => self::strField($recording, 'id', 64),
             'title' => self::strField($recording, 'title'),
-            'duration' => self::intField($recording, 'length'),
+            // M-MUSICBRAINZ-23: MusicBrainz `length` is MILLISECONDS while
+            // the host's top-level `metadata.duration` is seconds. The key
+            // carries its unit (`duration_ms`) so the two can never be
+            // confused by a consumer doing arithmetic on both.
+            'duration_ms' => self::intField($recording, 'length'),
             'position' => self::intField($recording, 'position'),
             'number' => self::intField($recording, 'number'),
             'isrc' => self::strValue($isrcs[0] ?? null, 32),

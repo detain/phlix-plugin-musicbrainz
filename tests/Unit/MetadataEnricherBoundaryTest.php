@@ -135,6 +135,10 @@ final class MetadataEnricherBoundaryTest extends TestCase
         $this->assertSame('Abcdef', $result->trackData['title']);
         $this->assertSame('ArtistName', $result->trackData['artist_name']);
         $this->assertSame('USRC12345678', $result->trackData['isrc']);
+        // M-MUSICBRAINZ-23: MB length is milliseconds and the persisted key
+        // carries the unit; the unit-blind 'duration' name must be gone.
+        $this->assertSame(180000, $result->trackData['duration_ms']);
+        $this->assertArrayNotHasKey('duration', $result->trackData);
     }
 
     public function testOversizedRemoteFieldsAreCapped(): void
@@ -180,7 +184,8 @@ final class MetadataEnricherBoundaryTest extends TestCase
         $this->assertArrayHasKey('mbid', $result->trackData, 'Extraction must run and parse the broken shapes away.');
         $this->assertNull($result->trackData['mbid']);
         $this->assertNull($result->trackData['title']);
-        $this->assertNull($result->trackData['duration']);
+        $this->assertArrayHasKey('duration_ms', $result->trackData, 'The unit-carrying key must always be extracted.');
+        $this->assertNull($result->trackData['duration_ms']);
         $this->assertNull($result->trackData['isrc']);
         $this->assertNull($result->trackData['artist_name']);
         foreach ($urls as $url) {

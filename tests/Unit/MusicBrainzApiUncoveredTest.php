@@ -287,22 +287,34 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         $this->assertGreaterThanOrEqual(90, $elapsed2, 'Second call should be delayed');
     }
 
-    public function testSearchArtistsWithLimitCapped(): void
+    /**
+     * M-MUSICBRAINZ-32: the previous version of this test used a mock that
+     * THREW on limit>100 — but MusicBrainzApi::get() swallows every
+     * Throwable and returns [] — so `assertSame([], $result)` held even if
+     * the cap regressed. The mock cannot fail. This version CAPTURES the
+     * outgoing query limit for all three search endpoints and pins both the
+     * ceiling (200 -> 100) and the floor the docblocks promise (0/-5 -> 1),
+     * so any clamp regression reddens the exact captured value.
+     */
+    public function testSearchLimitsAreClampedToTheDocumentedRange(): void
     {
-        $httpClient = new class implements HttpClientInterface {
+        $recorder = new class implements HttpClientInterface {
+            /** @var list<int|string|null> */
+            public array $limits = [];
+
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
-                // Verify limit is capped at 100
-                if (isset($query['limit']) && $query['limit'] > 100) {
-                    throw new \RuntimeException('Limit should be capped at 100');
-                }
-                return HttpResponse::fromBody(is_string(json_encode(['artists' => []])) ? (string)json_encode(['artists' => []]) : null);
+                $this->limits[] = $query['limit'] ?? null;
+
+                return HttpResponse::fromBody('{"artists": [], "releases": [], "recordings": []}');
             }
         };
 
-        $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->searchArtists('test', 200); // Request more than max
+        $api = new MusicBrainzApi($recorder, 'Test/1.0 (https://example.invalid)', 0);
+        $api->searchArtists('test', 200);
+        $api->searchReleases('test', -5);
+        $api->searchRecordings('test', 0);
 
-        $this->assertSame([], $result);
+        $this->assertSame([100, 1, 1], $recorder->limits);
     }
 }

@@ -393,7 +393,7 @@ final class MusicBrainzApi
     {
         $response = $this->get('/artist', [
             'query' => $query,
-            'limit' => min($limit, 100),
+            'limit' => max(1, min($limit, 100)),
             'fmt' => 'json',
         ]);
 
@@ -412,7 +412,7 @@ final class MusicBrainzApi
     {
         $response = $this->get('/release', [
             'query' => $query,
-            'limit' => min($limit, 100),
+            'limit' => max(1, min($limit, 100)),
             'fmt' => 'json',
         ]);
 
@@ -431,7 +431,7 @@ final class MusicBrainzApi
     {
         $response = $this->get('/recording', [
             'query' => $query,
-            'limit' => min($limit, 100),
+            'limit' => max(1, min($limit, 100)),
             'fmt' => 'json',
         ]);
 

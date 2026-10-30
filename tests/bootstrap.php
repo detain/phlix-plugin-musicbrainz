@@ -12,9 +12,6 @@ declare(strict_types=1);
 // Load the composer autoloader
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Load Workerman MySQL Connection stub for testing
-require_once __DIR__ . '/stubs/Workerman/MySQL/Connection.php';
-
 /**
  * Stub for host-supplied Phlix\Media\Library\ItemRepository class.
  *
