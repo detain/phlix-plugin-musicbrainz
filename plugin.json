@@ -32,7 +32,7 @@
             "required": false,
             "tier": "advanced",
             "label": "Rate-limit delay (ms)",
-            "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second)."
+            "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). Values below 1000 are raised to the 1000 ms ToS floor."
         },
         "auto_enrich": {
             "type": "boolean",

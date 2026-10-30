@@ -25,6 +25,17 @@ use Psr\Log\NullLogger;
  * to MusicBrainz are bounded to prevent overwhelming the server. Falls back to
  * per-instance rate limiting in non-coroutine contexts (CLI, testing).
  *
+ * Multi-process honesty (M-MUSICBRAINZ-10): all pacing here is per-process,
+ * while MusicBrainz's ~1 req/s etiquette is enforced per IP. A resident
+ * server runs several worker processes; if more than one actively enriches at
+ * once, the aggregate IP rate multiplies accordingly. The shipped posture is
+ * single-enrichment-worker: enrichment is driven by the queue drain, not by
+ * every worker. The settings layer additionally floors the API pacing delay
+ * at MusicBrainzSettings::MIN_RATE_LIMIT_DELAY_MS (1000 ms) so a
+ * misconfigured `rate_limit_delay` cannot burst through the client's own
+ * layer; cross-process token-bucket coordination is not implemented and is
+ * the honest residual if this plugin ever runs multi-worker drains.
+ *
  * @package Phlix\Plugin\MusicBrainz
  */
 final class MusicBrainzApi

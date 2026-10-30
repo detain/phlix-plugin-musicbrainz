@@ -25,6 +25,15 @@ final class MusicBrainzSettings
     private const DEFAULT_USER_AGENT =
         'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)';
 
+    /**
+     * MusicBrainz ToS floor for the API-layer pacing delay, in milliseconds
+     * (no more than one request per second). Mirrors the EnrichmentQueue's
+     * MIN_INTERVAL_FLOOR_SECONDS law: one queue item performs several API
+     * calls, so the pacing floor must be enforced here too, not only at
+     * dispatch spacing (M-MUSICBRAINZ-10).
+     */
+    public const MIN_RATE_LIMIT_DELAY_MS = 1000;
+
     public function __construct(
         public readonly bool $enabled = false,
         public readonly string $userAgent = self::DEFAULT_USER_AGENT,
@@ -50,7 +59,7 @@ final class MusicBrainzSettings
                 ? $data['user_agent']
                 : self::DEFAULT_USER_AGENT,
             rateLimitDelay: is_int($data['rate_limit_delay'] ?? null) && $data['rate_limit_delay'] > 0
-                ? $data['rate_limit_delay']
+                ? max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
                 : 1100,
             autoEnrich: (bool)($data['auto_enrich'] ?? true),
             fetchAlbumArt: (bool)($data['fetch_album_art'] ?? true),

@@ -49,6 +49,26 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame('deep', $settings->searchDepth);
     }
 
+    /**
+     * M-MUSICBRAINZ-10: the API-layer pacing delay must carry the same
+     * MusicBrainz ToS floor the EnrichmentQueue enforces (MIN_INTERVAL_
+     * FLOOR_SECONDS = 1.0 s). A sub-second admin value used to pass through
+     * raw (rate_limit_delay: 10 -> 10 ms), letting one item's 3-5 API calls
+     * burst multi-request-per-second through the client's own layer.
+     */
+    public function testFromArrayClampsSubSecondRateLimitDelayToTheOneSecondFloor(): void
+    {
+        $this->assertSame(1000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 10])->rateLimitDelay);
+        $this->assertSame(1000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 999])->rateLimitDelay);
+        $this->assertSame(1000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 1])->rateLimitDelay);
+    }
+
+    public function testFromArrayKeepsDelaysAtOrAboveTheFloor(): void
+    {
+        $this->assertSame(1000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 1000])->rateLimitDelay);
+        $this->assertSame(2500, MusicBrainzSettings::fromArray(['rate_limit_delay' => 2500])->rateLimitDelay);
+    }
+
     public function testFromArrayWithInvalidSearchDepth(): void
     {
         $data = [
