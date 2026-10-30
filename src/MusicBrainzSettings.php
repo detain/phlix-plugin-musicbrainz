@@ -64,6 +64,13 @@ final class MusicBrainzSettings
     /**
      * Whether the plugin is properly configured and enabled.
      *
+     * The User-Agent gate is ENFORCED law, not advisory: enrichment is
+     * refused unless the UA carries a URL (the `://` substring) so
+     * MusicBrainz can always reach the operator. An email-only UA — the
+     * shape MusicBrainz's own older etiquette examples suggest — FAILS this
+     * gate and leaves the plugin a silent no-op; see README "Settings" for
+     * the operator-facing statement of this law.
+     *
      * @return bool
      */
     public function isConfigured(): bool

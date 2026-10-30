@@ -22,7 +22,7 @@
             "required": false,
             "tier": "advanced",
             "label": "User-Agent",
-            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info, e.g. a URL). Optional — the default is fine; customise if you run a fork.",
+            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). ENFORCED: enrichment only runs when the value contains a URL (the '://' substring) — an email-only UA silently disables the plugin; include a project/contact URL. Optional — the default is fine; customise if you run a fork.",
             "link": "https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
             "link_text": "MusicBrainz API etiquette"
         },
