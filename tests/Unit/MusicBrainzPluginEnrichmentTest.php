@@ -231,6 +231,60 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
     }
 
     /**
+     * M-MUSICBRAINZ-07: a partial enrichment must not wipe previously
+     * persisted sections. Before the merge, persist() replaced the whole
+     * `musicbrainz` namespace — so a failed /release/ leg silently deleted
+     * the album, artist and art results of every earlier successful run.
+     */
+    public function testPartialEnrichmentPreservesPreviouslyPersistedSections(): void
+    {
+        $repo = $this->createMock(ItemRepository::class);
+        $repo->method('findById')->willReturn([
+            'id' => 'item-1',
+            'name' => 'Test Track',
+            'type' => 'track',
+            'path' => '/music/a.flac',
+            'metadata' => [
+                'artist' => 'Test Artist',
+                'musicbrainz' => [
+                    'artist' => ['name' => 'Prior Artist'],
+                    'album' => ['title' => 'Prior Album'],
+                    'tracks' => ['title' => 'Old Track'],
+                    'album_art' => true,
+                ],
+            ],
+        ]);
+
+        $repo->expects($this->once())
+            ->method('update')
+            ->with(
+                $this->identicalTo('item-1'),
+                $this->callback(function (array $data): bool {
+                    $mb = $data['metadata_json']['musicbrainz'] ?? null;
+                    if (!is_array($mb)) {
+                        return false;
+                    }
+                    return ($mb['album']['title'] ?? null) === 'Prior Album'
+                        && ($mb['artist']['name'] ?? null) === 'Prior Artist'
+                        && ($mb['tracks']['title'] ?? null) === 'Test Track'
+                        && ($mb['album_art'] ?? null) === true;
+                })
+            );
+
+        $plugin = $this->enabledPlugin();
+        // The recording leg matches; the release leg has NO response, so the
+        // album section comes back empty for this run and must be carried.
+        $responses = $this->recordingMatchResponses();
+        unset($responses['/release/rel-1']);
+        $this->injectApi($plugin, new MusicBrainzApi($this->countingClient($responses), self::VALID_UA, 0));
+        $plugin->onEnable($this->container($repo));
+
+        $plugin->onMediaItemAdded(new MediaItemAdded('item-1', 'lib-1', '/music/a.flac', 'track'));
+
+        $this->assertTrue($plugin->drainOne(), 'First drain must dispatch the queued item.');
+    }
+
+    /**
      * M-MUSICBRAINZ-12: host metadata_json is open-ended mixed (ID3-style
      * multi-value tags persist as arrays). Before the boundary parse, an
      * array artist/duration flowed raw into strict_types ?string/?int params

@@ -288,6 +288,11 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
      * marker is stored instead) — artwork ingestion needs a dedicated host
      * hook (Wave 2), and inlining base64 would bloat the row.
      *
+     * Partial results MERGE instead of replacing: a section this run did not
+     * produce (empty array, or a null art blob when art was seen before)
+     * carries the previously persisted section forward, so one failed leg of
+     * one enrichment can never silently erase a complete earlier result.
+     *
      * @param MediaItem $mediaItem Loaded item (source of existing metadata).
      */
     private function persist(string $itemId, MediaItem $mediaItem, MetadataEnrichmentResult $result): void
@@ -297,10 +302,21 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         }
 
         $enriched = $result->toArray();
-        // Replace the base64 image blob with a presence marker; see docblock.
-        $enriched['album_art'] = $result->albumArtBase64 !== null;
 
         $metadata = is_array($mediaItem->metadata) ? $mediaItem->metadata : [];
+        $prior = is_array($metadata['musicbrainz'] ?? null) ? $metadata['musicbrainz'] : [];
+
+        foreach (['artist', 'album', 'tracks'] as $section) {
+            if ($enriched[$section] === [] && is_array($prior[$section] ?? null) && $prior[$section] !== []) {
+                $enriched[$section] = $prior[$section];
+            }
+        }
+
+        // Replace the base64 image blob with a monotone presence marker: once
+        // artwork has been persisted for this item, later runs keep the flag
+        // until a future art-ingestion hook owns it. See class docblock.
+        $enriched['album_art'] = $result->albumArtBase64 !== null || ($prior['album_art'] ?? null) === true;
+
         $metadata['musicbrainz'] = $enriched;
 
         $this->itemRepository->update($itemId, ['metadata_json' => $metadata]);
