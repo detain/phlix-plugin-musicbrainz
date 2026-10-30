@@ -43,6 +43,18 @@ final class MusicBrainzApi
     private const BASE_URL = 'https://musicbrainz.org/ws/2';
     private const COVER_ART_ARCHIVE_URL = 'https://coverartarchive.org';
 
+    /** Hard cap for one cover-art response body (M-MUSICBRAINZ-29): 10 MiB. */
+    private const MAX_IMAGE_RESPONSE_BYTES = 10 * 1024 * 1024;
+
+    /**
+     * Canonical MusicBrainz entity ID shape (M-MUSICBRAINZ-11): an MBID is
+     * always a UUID, so anything else must NEVER be interpolated into a
+     * request path — slashes, query marks or fragments in a "supposed" id
+     * rewrite the URL we dial. The format gate is the boundary law.
+     */
+    private const MBID_PATTERN =
+        '#^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$#i';
+
     /** @var int Maximum concurrent requests per host (bounded limiter) */
     private const MAX_CONCURRENT_PER_HOST = 2;
 
@@ -120,7 +132,7 @@ final class MusicBrainzApi
 
     public function __construct(
         ?HttpClientInterface $httpClient = null,
-        string $userAgent = 'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)',
+        string $userAgent = MusicBrainzSettings::DEFAULT_USER_AGENT,
         int $rateLimitDelay = 1100,
         ?LoggerInterface $logger = null,
         ?callable $sleeper = null
@@ -446,6 +458,10 @@ final class MusicBrainzApi
      */
     public function getArtist(string $mbid, array $inc = ['aliases', 'tags', 'genres']): ?array
     {
+        if (!$this->acceptMbid('artist', $mbid)) {
+            return null;
+        }
+
         $response = $this->get("/artist/{$mbid}", [
             'fmt' => 'json',
             'inc' => implode('+', $inc),
@@ -467,6 +483,10 @@ final class MusicBrainzApi
      */
     public function getRelease(string $mbid, array $inc = ['recordings', 'artist-rels', 'release-rels']): ?array
     {
+        if (!$this->acceptMbid('release', $mbid)) {
+            return null;
+        }
+
         $response = $this->get("/release/{$mbid}", [
             'fmt' => 'json',
             'inc' => implode('+', $inc),
@@ -488,6 +508,10 @@ final class MusicBrainzApi
      */
     public function getRecording(string $mbid, array $inc = ['artist-rels', 'releases']): ?array
     {
+        if (!$this->acceptMbid('recording', $mbid)) {
+            return null;
+        }
+
         $response = $this->get("/recording/{$mbid}", [
             'fmt' => 'json',
             'inc' => implode('+', $inc),
@@ -508,6 +532,10 @@ final class MusicBrainzApi
      */
     public function getCoverArt(string $releaseMbid): ?array
     {
+        if (!$this->acceptMbid('cover-art-release', $releaseMbid)) {
+            return null;
+        }
+
         try {
             $response = $this->requestCached(
                 self::COVER_ART_ARCHIVE_URL . "/release/{$releaseMbid}",
@@ -568,40 +596,50 @@ final class MusicBrainzApi
     private function resolveFrontCover(string $releaseMbid): ?string
     {
         $images = $this->getCoverArt($releaseMbid);
-        if ($images === null) {
+        if ($images === null || $images === []) {
             return null;
         }
 
         foreach ($images as $image) {
-            if (!is_array($image)) {
-                continue;
-            }
-
             if (($image['front'] ?? false) === true) {
-                return $this->fetchImage($image['image'] ?? '');
+                return $this->fetchImage(self::coverArtSource($image));
             }
         }
 
         // Fallback to first image with type "Primary"
         foreach ($images as $image) {
-            if (!is_array($image)) {
-                continue;
-            }
-
             $types = is_array($image['types'] ?? null) ? $image['types'] : [];
             if (in_array('Primary', $types, true)) {
-                return $this->fetchImage($image['image'] ?? '');
+                return $this->fetchImage(self::coverArtSource($image));
             }
         }
 
-        // Last resort: first image
-        if (count($images) > 0) {
-            $first = reset($images);
+        return $this->fetchImage(self::coverArtSource($images[0]));
+    }
 
-            return $this->fetchImage(is_array($first) ? ($first['image'] ?? '') : '');
+    /**
+     * Pick the rendition to dial from one Cover Art Archive row (M-29): the
+     * CAA ships a full-size original plus thumbnails (small ~250px,
+     * large ~500px). This blob is held base64 in memory per fetch and today
+     * only feeds a presence marker, so the smallest sufficient rendition
+     * wins: thumbnails.large, then thumbnails.small, then the original.
+     * Every candidate still passes the isSafeCoverArtUrl() allowlist gate
+     * inside fetchImage() — the URL comes from the network and stays
+     * untrusted.
+     *
+     * @param array<array-key, mixed> $image
+     */
+    private static function coverArtSource(array $image): mixed
+    {
+        $thumbnails = is_array($image['thumbnails'] ?? null) ? $image['thumbnails'] : [];
+        foreach (['large', 'small'] as $size) {
+            $url = $thumbnails[$size] ?? null;
+            if (is_string($url) && $url !== '') {
+                return $url;
+            }
         }
 
-        return null;
+        return $image['image'] ?? '';
     }
 
     /**
@@ -638,6 +676,18 @@ final class MusicBrainzApi
             $response = $this->requestWithLimiting($url, ['User-Agent' => $this->userAgent]);
             $this->observeRateSignals($response);
             if (!$response->ok() || $response->body === null) {
+                return null;
+            }
+
+            // M-29: hard byte cap BEFORE the base64 copy — a hostile or
+            // misconfigured endpoint on an allow-listed host must never be
+            // able to balloon a resident worker's memory.
+            if (strlen($response->body) > self::MAX_IMAGE_RESPONSE_BYTES) {
+                $this->logger->warning('MusicBrainz: refused oversized cover image body', [
+                    'bytes' => strlen($response->body),
+                    'cap' => self::MAX_IMAGE_RESPONSE_BYTES,
+                ]);
+
                 return null;
             }
 
@@ -725,6 +775,27 @@ final class MusicBrainzApi
         $id = $response['id'] ?? null;
 
         return is_string($id) && $id !== '';
+    }
+
+    /**
+     * MBID shape gate (M-MUSICBRAINZ-11): only canonical UUID entity ids may
+     * ever be interpolated into a request path. A value carrying `/`, `?`,
+     * `#` or any other non-MBID character would rewrite the URL (path escape
+     * / query override), so it is refused with a loud log and the transport
+     * is NEVER dialed.
+     */
+    private function acceptMbid(string $kind, string $mbid): bool
+    {
+        if (preg_match(self::MBID_PATTERN, $mbid) === 1) {
+            return true;
+        }
+
+        $this->logger->warning('MusicBrainz: refused malformed MBID (transport not dialed)', [
+            'kind' => $kind,
+            'mbid' => substr($mbid, 0, 96),
+        ]);
+
+        return false;
     }
 
     /**

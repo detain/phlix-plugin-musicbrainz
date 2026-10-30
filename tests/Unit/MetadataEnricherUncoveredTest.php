@@ -61,11 +61,11 @@ final class MetadataEnricherUncoveredTest extends TestCase
             '/release' => json_encode(['releases' => []]),  // No release found either
             '/artist' => json_encode([
                 'artists' => [
-                    ['id' => 'artist-mbid-456', 'name' => 'Fallback Artist', 'score' => 100],
+                    ['id' => '2739ba9f-73e0-4598-6db1-0b6876bf4fab', 'name' => 'Fallback Artist', 'score' => 100],
                 ],
             ]),
-            '/artist/artist-mbid-456' => json_encode([
-                'id' => 'artist-mbid-456',
+            '/artist/2739ba9f-73e0-4598-6db1-0b6876bf4fab' => json_encode([
+                'id' => '2739ba9f-73e0-4598-6db1-0b6876bf4fab',
                 'name' => 'Fallback Artist',
                 'sort-name' => 'Artist, Fallback',
                 'tags' => [['name' => 'rock']],
@@ -108,19 +108,25 @@ final class MetadataEnricherUncoveredTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Fast Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Fast Artist']],
+                            [
+                                'name' => 'Fast Artist',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Fast Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-123' => json_encode([
-                'id' => 'release-mbid-123',
+            '/release/637d898a-5a4e-d071-2d33-dcf07483d91d' => json_encode([
+                'id' => '637d898a-5a4e-d071-2d33-dcf07483d91d',
                 'title' => 'Fast Album',
                 'artist-credit' => [
-                    ['name' => 'Fast Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Fast Artist']],
+                    [
+                        'name' => 'Fast Artist',
+                        'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Fast Artist'],
+                    ],
                 ],
             ]),
         ]);
@@ -137,7 +143,7 @@ final class MetadataEnricherUncoveredTest extends TestCase
     public function testEnrichWithNormalSearchReleaseFallback(): void
     {
         // Note: The mock API's str_contains pattern matching means /release matches
-        // before /release/release-mbid-789. This test documents that when recording
+        // before /release/f31fb230-8844-d496-bca3-07e3f94bdcfb. This test documents that when recording
         // search finds nothing and we fall back to release search, the mock returns
         // an array (search format) instead of a single release (lookup format).
         // The actual getRelease call fails because it expects {id: ...} not {releases: [...]}.
@@ -148,10 +154,13 @@ final class MetadataEnricherUncoveredTest extends TestCase
             '/release' => json_encode([
                 'releases' => [
                     [
-                        'id' => 'release-mbid-789',
+                        'id' => 'f31fb230-8844-d496-bca3-07e3f94bdcfb',
                         'title' => 'Fallback Album',
                         'artist-credit' => [
-                            ['name' => 'Fallback Artist', 'artist' => ['id' => 'artist-mbid-789', 'name' => 'Fallback Artist']],
+                            [
+                                'name' => 'Fallback Artist',
+                                'artist' => ['id' => '0620fc6d-76d9-9505-a1d6-908b47536ec2', 'name' => 'Fallback Artist'],
+                            ],
                         ],
                     ],
                 ],
@@ -180,23 +189,29 @@ final class MetadataEnricherUncoveredTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Known Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Known Artist']],
+                            [
+                                'name' => 'Known Artist',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Known Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-123' => json_encode([
-                'id' => 'release-mbid-123',
+            '/release/637d898a-5a4e-d071-2d33-dcf07483d91d' => json_encode([
+                'id' => '637d898a-5a4e-d071-2d33-dcf07483d91d',
                 'title' => 'Album For Known Artist',
                 'artist-credit' => [
-                    ['name' => 'Known Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Known Artist']],
+                    [
+                        'name' => 'Known Artist',
+                        'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Known Artist'],
+                    ],
                 ],
             ]),
-            '/artist/artist-mbid-123' => json_encode([
-                'id' => 'artist-mbid-123',
+            '/artist/492458af-780c-a968-ab5e-e418342dcfbd' => json_encode([
+                'id' => '492458af-780c-a968-ab5e-e418342dcfbd',
                 'name' => 'Known Artist',
                 'sort-name' => 'Known Artist',
                 'type' => 'Person',
@@ -232,19 +247,25 @@ final class MetadataEnricherUncoveredTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Artist With Art', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Artist With Art']],
+                            [
+                                'name' => 'Artist With Art',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Artist With Art'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-123' => json_encode([
-                'id' => 'release-mbid-123',
+            '/release/637d898a-5a4e-d071-2d33-dcf07483d91d' => json_encode([
+                'id' => '637d898a-5a4e-d071-2d33-dcf07483d91d',
                 'title' => 'Album With Art',
                 'artist-credit' => [
-                    ['name' => 'Artist With Art', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Artist With Art']],
+                    [
+                        'name' => 'Artist With Art',
+                        'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Artist With Art'],
+                    ],
                 ],
             ]),
         ]);
@@ -298,10 +319,13 @@ final class MetadataEnricherUncoveredTest extends TestCase
                         'length' => 180000,  // 180 seconds
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Duration Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Duration Artist']],
+                            [
+                                'name' => 'Duration Artist',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Duration Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                     [
@@ -310,19 +334,25 @@ final class MetadataEnricherUncoveredTest extends TestCase
                         'length' => 300000,  // 300 seconds - no match
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Duration Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Duration Artist']],
+                            [
+                                'name' => 'Duration Artist',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Duration Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-123' => json_encode([
-                'id' => 'release-mbid-123',
+            '/release/637d898a-5a4e-d071-2d33-dcf07483d91d' => json_encode([
+                'id' => '637d898a-5a4e-d071-2d33-dcf07483d91d',
                 'title' => 'Duration Album',
                 'artist-credit' => [
-                    ['name' => 'Duration Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Duration Artist']],
+                    [
+                        'name' => 'Duration Artist',
+                        'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Duration Artist'],
+                    ],
                 ],
             ]),
         ]);
@@ -343,23 +373,26 @@ final class MetadataEnricherUncoveredTest extends TestCase
         // and fetchAlbumArt is enabled. This covers line 123 in MetadataEnricher.
         // The key is that we need getRelease lookup to work, which requires
         // returning single-release format, not search format.
-        // We achieve this by putting the specific /release/release-mbid-456 pattern BEFORE /release
+        // We achieve this by putting the specific /release/f284f9c7-4d16-9bd4-5870-8b77c976643e pattern BEFORE /release
         $api = $this->createMockApi([
             '/recording' => json_encode(['recordings' => []]),  // No recording found
             // Specific lookup MUST come before generic /release to avoid str_contains match
-            '/release/release-mbid-456' => json_encode([
-                'id' => 'release-mbid-456',
+            '/release/f284f9c7-4d16-9bd4-5870-8b77c976643e' => json_encode([
+                'id' => 'f284f9c7-4d16-9bd4-5870-8b77c976643e',
                 'title' => 'Fallback Album',
                 'date' => '2024-01-01',
                 'artist-credit' => [
-                    ['name' => 'Fallback Artist', 'artist' => ['id' => 'artist-mbid-456', 'name' => 'Fallback Artist']],
+                    [
+                        'name' => 'Fallback Artist',
+                        'artist' => ['id' => '2739ba9f-73e0-4598-6db1-0b6876bf4fab', 'name' => 'Fallback Artist'],
+                    ],
                 ],
             ]),
             // Generic search pattern - used for release search
             '/release' => json_encode([
                 'releases' => [
                     [
-                        'id' => 'release-mbid-456',
+                        'id' => 'f284f9c7-4d16-9bd4-5870-8b77c976643e',
                         'title' => 'Fallback Album',
                     ],
                 ],
@@ -375,7 +408,7 @@ final class MetadataEnricherUncoveredTest extends TestCase
 
         // Album data should be populated from getRelease lookup
         $this->assertNotEmpty($result->albumData);
-        $this->assertSame('release-mbid-456', $result->albumData['mbid']);
+        $this->assertSame('f284f9c7-4d16-9bd4-5870-8b77c976643e', $result->albumData['mbid']);
         $this->assertSame('Fallback Album', $result->albumData['title']);
 
         // Album art will be null because coverartarchive.org is not mocked,

@@ -135,6 +135,19 @@ final class EnrichmentQueue
     }
 
     /**
+     * FIFO snapshot of the pending item IDs (M-MUSICBRAINZ-25): lets the
+     * owner survive a settings-save rebuild without losing the backlog —
+     * {@see MusicBrainzPlugin::configure()} re-enqueues exactly this list
+     * onto the fresh queue instead of dropping every awaited enrichment.
+     *
+     * @return list<string>
+     */
+    public function pendingIds(): array
+    {
+        return $this->queue;
+    }
+
+    /**
      * Whether the queue is empty.
      */
     public function isEmpty(): bool

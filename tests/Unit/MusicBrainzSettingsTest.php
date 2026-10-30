@@ -29,7 +29,7 @@ final class MusicBrainzSettingsTest extends TestCase
         $settings = new MusicBrainzSettings();
 
         $this->assertFalse($settings->enabled);
-        $this->assertSame('PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)', $settings->userAgent);
+        $this->assertSame(MusicBrainzSettings::DEFAULT_USER_AGENT, $settings->userAgent);
         $this->assertSame(1100, $settings->rateLimitDelay);
         $this->assertTrue($settings->autoEnrich);
         $this->assertTrue($settings->fetchAlbumArt);

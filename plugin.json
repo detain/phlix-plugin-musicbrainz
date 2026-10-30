@@ -18,7 +18,7 @@
         },
         "user_agent": {
             "type": "string",
-            "default": "PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
+            "default": "PhlixMusicBrainzPlugin/0.4.0 (https://github.com/detain/phlix-plugin-musicbrainz)",
             "required": false,
             "tier": "advanced",
             "label": "User-Agent",

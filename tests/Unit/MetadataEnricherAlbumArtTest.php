@@ -83,7 +83,8 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                 'images' => [
                     [
                         'front' => true,
-                        'image' => 'https://covers.coverartarchive.org/release/release-mbid-123/image-132',
+                        'image' => 'https://covers.coverartarchive.org/release/'
+                            . '637d898a-5a4e-d071-2d33-dcf07483d91d/image-132',
                         'types' => ['Front'],
                     ],
                 ],
@@ -96,19 +97,25 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Art Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Art Artist']],
+                            [
+                                'name' => 'Art Artist',
+                                'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Art Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-123'],
+                            ['id' => '637d898a-5a4e-d071-2d33-dcf07483d91d'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-123' => json_encode([
-                'id' => 'release-mbid-123',
+            '/release/637d898a-5a4e-d071-2d33-dcf07483d91d' => json_encode([
+                'id' => '637d898a-5a4e-d071-2d33-dcf07483d91d',
                 'title' => 'Album With Cover',
                 'artist-credit' => [
-                    ['name' => 'Art Artist', 'artist' => ['id' => 'artist-mbid-123', 'name' => 'Art Artist']],
+                    [
+                        'name' => 'Art Artist',
+                        'artist' => ['id' => '492458af-780c-a968-ab5e-e418342dcfbd', 'name' => 'Art Artist'],
+                    ],
                 ],
             ]),
         ]);
@@ -135,7 +142,8 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                     [
                         'front' => false,
                         'types' => ['Primary'],
-                        'image' => 'https://covers.coverartarchive.org/release/release-mbid-456/image-133',
+                        'image' => 'https://covers.coverartarchive.org/release/'
+                            . 'f284f9c7-4d16-9bd4-5870-8b77c976643e/image-133',
                     ],
                 ],
             ]),
@@ -147,19 +155,25 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Primary Artist', 'artist' => ['id' => 'artist-mbid-456', 'name' => 'Primary Artist']],
+                            [
+                                'name' => 'Primary Artist',
+                                'artist' => ['id' => '2739ba9f-73e0-4598-6db1-0b6876bf4fab', 'name' => 'Primary Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-456'],
+                            ['id' => 'f284f9c7-4d16-9bd4-5870-8b77c976643e'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-456' => json_encode([
-                'id' => 'release-mbid-456',
+            '/release/f284f9c7-4d16-9bd4-5870-8b77c976643e' => json_encode([
+                'id' => 'f284f9c7-4d16-9bd4-5870-8b77c976643e',
                 'title' => 'Album With Primary Cover',
                 'artist-credit' => [
-                    ['name' => 'Primary Artist', 'artist' => ['id' => 'artist-mbid-456', 'name' => 'Primary Artist']],
+                    [
+                        'name' => 'Primary Artist',
+                        'artist' => ['id' => '2739ba9f-73e0-4598-6db1-0b6876bf4fab', 'name' => 'Primary Artist'],
+                    ],
                 ],
             ]),
         ]);
@@ -186,19 +200,25 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Error Artist', 'artist' => ['id' => 'artist-mbid-789', 'name' => 'Error Artist']],
+                            [
+                                'name' => 'Error Artist',
+                                'artist' => ['id' => '0620fc6d-76d9-9505-a1d6-908b47536ec2', 'name' => 'Error Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-789'],
+                            ['id' => 'f31fb230-8844-d496-bca3-07e3f94bdcfb'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-789' => json_encode([
-                'id' => 'release-mbid-789',
+            '/release/f31fb230-8844-d496-bca3-07e3f94bdcfb' => json_encode([
+                'id' => 'f31fb230-8844-d496-bca3-07e3f94bdcfb',
                 'title' => 'Album Without Art',
                 'artist-credit' => [
-                    ['name' => 'Error Artist', 'artist' => ['id' => 'artist-mbid-789', 'name' => 'Error Artist']],
+                    [
+                        'name' => 'Error Artist',
+                        'artist' => ['id' => '0620fc6d-76d9-9505-a1d6-908b47536ec2', 'name' => 'Error Artist'],
+                    ],
                 ],
             ]),
             // Cover art fetch throws
@@ -228,16 +248,19 @@ final class MetadataEnricherAlbumArtTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'No Cover Artist', 'artist' => ['id' => 'artist-mbid-000', 'name' => 'No Cover Artist']],
+                            [
+                                'name' => 'No Cover Artist',
+                                'artist' => ['id' => '2725fa1a-5abd-3dbe-818c-3c6f9d0fa388', 'name' => 'No Cover Artist'],
+                            ],
                         ],
                         'releases' => [
-                            ['id' => 'release-mbid-000'],
+                            ['id' => 'cedf7b93-debc-3649-cd56-f0edbededc0c'],
                         ],
                     ],
                 ],
             ]),
-            '/release/release-mbid-000' => json_encode([
-                'id' => 'release-mbid-000',
+            '/release/cedf7b93-debc-3649-cd56-f0edbededc0c' => json_encode([
+                'id' => 'cedf7b93-debc-3649-cd56-f0edbededc0c',
                 'title' => 'Album Without Cover',
             ]),
         ]);

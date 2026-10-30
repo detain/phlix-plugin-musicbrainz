@@ -49,11 +49,11 @@ final class MusicBrainzApiTest extends TestCase
                 if (str_contains($url, '/artist')) {
                     return HttpResponse::fromBody(is_string(json_encode([
                         'artists' => [
-                            ['id' => 'mbid-123', 'name' => 'Test Artist', 'score' => 100],
+                            ['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c', 'name' => 'Test Artist', 'score' => 100],
                         ],
                     ])) ? (string)json_encode([
                         'artists' => [
-                            ['id' => 'mbid-123', 'name' => 'Test Artist', 'score' => 100],
+                            ['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c', 'name' => 'Test Artist', 'score' => 100],
                         ],
                     ]) : null);
                 }
@@ -65,7 +65,7 @@ final class MusicBrainzApiTest extends TestCase
         $result = $api->searchArtists('test');
 
         $this->assertCount(1, $result);
-        $this->assertSame('mbid-123', $result[0]['id']);
+        $this->assertSame('54736453-1283-7eb6-02ab-1bae8501ee4c', $result[0]['id']);
         $this->assertSame('Test Artist', $result[0]['name']);
     }
 
@@ -109,7 +109,7 @@ final class MusicBrainzApiTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getArtist('mbid-123');
+        $result = $api->getArtist('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNull($result);
     }
@@ -119,13 +119,13 @@ final class MusicBrainzApiTest extends TestCase
         $httpClient = new class implements HttpClientInterface {
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
-                if (str_contains($url, '/artist/mbid-123')) {
+                if (str_contains($url, '/artist/54736453-1283-7eb6-02ab-1bae8501ee4c')) {
                     return HttpResponse::fromBody(is_string(json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'name' => 'Test Artist',
                         'sort-name' => 'Artist, Test',
                     ])) ? (string)json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'name' => 'Test Artist',
                         'sort-name' => 'Artist, Test',
                     ]) : null);
@@ -135,10 +135,10 @@ final class MusicBrainzApiTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getArtist('mbid-123');
+        $result = $api->getArtist('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNotNull($result);
-        $this->assertSame('mbid-123', $result['id']);
+        $this->assertSame('54736453-1283-7eb6-02ab-1bae8501ee4c', $result['id']);
         $this->assertSame('Test Artist', $result['name']);
     }
 
@@ -152,7 +152,7 @@ final class MusicBrainzApiTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getCoverArt('release-mbid');
+        $result = $api->getCoverArt('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNull($result);
     }
@@ -180,7 +180,7 @@ final class MusicBrainzApiTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getCoverArt('release-mbid');
+        $result = $api->getCoverArt('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNotNull($result);
         $this->assertCount(2, $result);
@@ -202,12 +202,12 @@ final class MusicBrainzApiTest extends TestCase
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
-                return HttpResponse::fromBody(is_string(json_encode(['id' => 'mbid-123'])) ? (string)json_encode(['id' => 'mbid-123']) : null);
+                return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
             }
         };
 
         $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
-        $api->getArtist('mbid-123');
+        $api->getArtist('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertSame('aliases+tags+genres', $captured->inc);
     }
@@ -220,12 +220,12 @@ final class MusicBrainzApiTest extends TestCase
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
-                return HttpResponse::fromBody(is_string(json_encode(['id' => 'mbid-123'])) ? (string)json_encode(['id' => 'mbid-123']) : null);
+                return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
             }
         };
 
         $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
-        $api->getRelease('mbid-123');
+        $api->getRelease('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertSame('recordings+artist-rels+release-rels', $captured->inc);
     }
@@ -238,12 +238,12 @@ final class MusicBrainzApiTest extends TestCase
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
-                return HttpResponse::fromBody(is_string(json_encode(['id' => 'mbid-123'])) ? (string)json_encode(['id' => 'mbid-123']) : null);
+                return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
             }
         };
 
         $api = new MusicBrainzApi($captured, 'Test/1.0 (test@example.com)', 0);
-        $api->getRecording('mbid-123');
+        $api->getRecording('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertSame('artist-rels+releases', $captured->inc);
     }

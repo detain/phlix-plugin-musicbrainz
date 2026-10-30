@@ -115,10 +115,10 @@ final class MetadataEnricherArtistCreditTest extends TestCase
             'title' => 'Station to Station',
             'score' => 100,
             'artist-credit' => self::TWO_ROW_CREDIT,
-            'releases' => [['id' => 'rel-credit-1']],
+            'releases' => [['id' => '2b51c2d5-63a0-7da7-bffe-c8e8b0e40650']],
         ];
         $release = [
-            'id' => 'rel-credit-1',
+            'id' => '2b51c2d5-63a0-7da7-bffe-c8e8b0e40650',
             'title' => 'Station to Station (Album)',
             'date' => '1976',
             'artist-credit' => self::TWO_ROW_CREDIT,
@@ -126,7 +126,7 @@ final class MetadataEnricherArtistCreditTest extends TestCase
 
         $result = $this->enricher([
             '/recording' => json_encode(['recordings' => [$recording]], JSON_THROW_ON_ERROR),
-            '/release/rel-credit-1' => json_encode($release, JSON_THROW_ON_ERROR),
+            '/release/2b51c2d5-63a0-7da7-bffe-c8e8b0e40650' => json_encode($release, JSON_THROW_ON_ERROR),
         ])->enrich('Station to Station');
 
         $this->assertCount(2, $result->albumData['artist_credits']);

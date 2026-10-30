@@ -55,14 +55,17 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
                         'length' => 180000,
                         'score' => 100,
                         'artist-credit' => [
-                            ['name' => 'Test Artist', 'artist' => ['id' => 'art-1', 'name' => 'Test Artist']],
+                            [
+                                'name' => 'Test Artist',
+                                'artist' => ['id' => '0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714', 'name' => 'Test Artist'],
+                            ],
                         ],
-                        'releases' => [['id' => 'rel-1']],
+                        'releases' => [['id' => 'f1409172-1d05-42d5-83ea-f703bb3beedb']],
                     ],
                 ],
             ]),
-            '/release/rel-1' => (string) json_encode([
-                'id' => 'rel-1',
+            '/release/f1409172-1d05-42d5-83ea-f703bb3beedb' => (string) json_encode([
+                'id' => 'f1409172-1d05-42d5-83ea-f703bb3beedb',
                 'title' => 'Test Album',
                 'date' => '2024-01-01',
             ]),
@@ -284,7 +287,7 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
         // The recording leg matches; the release leg has NO response, so the
         // album section comes back empty for this run and must be carried.
         $responses = $this->recordingMatchResponses();
-        unset($responses['/release/rel-1']);
+        unset($responses['/release/f1409172-1d05-42d5-83ea-f703bb3beedb']);
         $this->injectApi($plugin, new MusicBrainzApi($this->countingClient($responses), self::VALID_UA, 0));
         $plugin->onEnable($this->container($repo));
 

@@ -70,7 +70,7 @@ final class MusicBrainzApiImageTrustTest extends TestCase
         $fetched = [];
         $api = $this->apiWithPoisonedListing('https://169.254.169.254/latest/image.bin', $fetched);
 
-        $this->assertNull($api->getFrontCover('rel-1'));
+        $this->assertNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
         foreach ($fetched as $url) {
             $this->assertStringNotContainsString('169.254.169.254', $url);
         }
@@ -79,9 +79,12 @@ final class MusicBrainzApiImageTrustTest extends TestCase
     public function testRefusesPlainHttpImage(): void
     {
         $fetched = [];
-        $api = $this->apiWithPoisonedListing('http://covers.coverartarchive.org/release/rel-1/image.bin', $fetched);
+        $api = $this->apiWithPoisonedListing(
+            'http://covers.coverartarchive.org/release/f1409172-1d05-42d5-83ea-f703bb3beedb/image.bin',
+            $fetched
+        );
 
-        $this->assertNull($api->getFrontCover('rel-1'));
+        $this->assertNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
     }
 
     public function testRefusesForeignHttpsHost(): void
@@ -89,7 +92,7 @@ final class MusicBrainzApiImageTrustTest extends TestCase
         $fetched = [];
         $api = $this->apiWithPoisonedListing('https://evil.example.org/image.bin', $fetched);
 
-        $this->assertNull($api->getFrontCover('rel-1'));
+        $this->assertNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
     }
 
     public function testRefusesFileScheme(): void
@@ -97,7 +100,7 @@ final class MusicBrainzApiImageTrustTest extends TestCase
         $fetched = [];
         $api = $this->apiWithPoisonedListing('file:///etc/passwd', $fetched);
 
-        $this->assertNull($api->getFrontCover('rel-1'));
+        $this->assertNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
     }
 
     /**
@@ -109,20 +112,20 @@ final class MusicBrainzApiImageTrustTest extends TestCase
         $fetched = [];
         $api = $this->apiWithPoisonedListing('https://coverartarchive.org.evil.example/image.bin', $fetched);
 
-        $this->assertNull($api->getFrontCover('rel-1'));
+        $this->assertNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
     }
 
     public function testAcceptsCanonicalApexAndSubdomainUrls(): void
     {
         $fetched = [];
         $api = $this->apiWithPoisonedListing('https://coverartarchive.org/image.bin', $fetched);
-        $this->assertNotNull($api->getFrontCover('rel-1'));
+        $this->assertNotNull($api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'));
 
         $fetched = [];
         $api = $this->apiWithPoisonedListing('https://covers.coverartarchive.org/image.bin', $fetched);
         $this->assertSame(
             base64_encode('PILFERED-SECRET'),
-            $api->getFrontCover('rel-1'),
+            $api->getFrontCover('f1409172-1d05-42d5-83ea-f703bb3beedb'),
             'A legit on-host image must still be fetched and returned.'
         );
     }

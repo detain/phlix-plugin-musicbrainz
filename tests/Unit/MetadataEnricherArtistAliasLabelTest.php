@@ -28,7 +28,7 @@ use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 final class MetadataEnricherArtistAliasLabelTest extends TestCase
 {
     private const ARTIST_MBID = '03ee8da9-ff5a-4a42-a758-07cbd0caca2b';
-    private const RELEASE_MBID = 'rel-alias-1';
+    private const RELEASE_MBID = 'efed2f28-d7f0-08bb-df3c-2cf62238b18f';
 
     protected function setUp(): void
     {

@@ -156,28 +156,28 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
     public function testNotFoundIsMemoizedButTransportFailureIsNot(): void
     {
         $api = $this->api(static function (int $n, string $url): HttpResponse {
-            if (str_contains($url, '/recording/missing')) {
+            if (str_contains($url, '/recording/6be2ca40-6763-c2a3-75fd-22aa2ca28eac')) {
                 return new HttpResponse(404, null);
             }
 
             return new HttpResponse(500, null);
         });
 
-        $this->assertNull($api->getRecording('missing'));
-        $this->assertNull($api->getRecording('missing'));
-        $this->assertNull($api->getRecording('missing'));
-        $lookups = array_filter($this->calls, static fn (array $c): bool => str_contains($c['url'], '/recording/missing'));
+        $this->assertNull($api->getRecording('6be2ca40-6763-c2a3-75fd-22aa2ca28eac'));
+        $this->assertNull($api->getRecording('6be2ca40-6763-c2a3-75fd-22aa2ca28eac'));
+        $this->assertNull($api->getRecording('6be2ca40-6763-c2a3-75fd-22aa2ca28eac'));
+        $lookups = array_filter($this->calls, static fn (array $c): bool => str_contains($c['url'], '/recording/6be2ca40-6763-c2a3-75fd-22aa2ca28eac'));
         $this->assertCount(1, $lookups, 'A 404 must be memoized; re-fetching it every lookup is waste.');
 
-        $this->assertNull($api->getRecording('broken'));
-        $this->assertNull($api->getRecording('broken'));
-        $broken = array_filter($this->calls, static fn (array $c): bool => str_contains($c['url'], '/recording/broken'));
+        $this->assertNull($api->getRecording('8418f870-bc20-9174-cb22-f131603079e8'));
+        $this->assertNull($api->getRecording('8418f870-bc20-9174-cb22-f131603079e8'));
+        $broken = array_filter($this->calls, static fn (array $c): bool => str_contains($c['url'], '/recording/8418f870-bc20-9174-cb22-f131603079e8'));
         $this->assertCount(2, $broken, 'A server 500 is NOT a "known absent" verdict; no negative memo.');
     }
 
     public function testEtagConditionalGetServesCachedBodyOn304(): void
     {
-        $body = '{"id":"art-1","name":"Etagged Artist"}';
+        $body = '{"id":"14652a6d-3c79-cb58-72e1-29a99be739e4","name":"Etagged Artist"}';
         $api = $this->api(static function (int $n) use ($body): HttpResponse {
             if ($n === 1) {
                 return new HttpResponse(200, $body, ['etag' => 'W/"v1"']);
@@ -186,10 +186,10 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
             return new HttpResponse(304, null);
         });
 
-        $first = $api->getArtist('art-1');
+        $first = $api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4');
         $this->assertSame('Etagged Artist', $first['name'] ?? null);
 
-        $second = $api->getArtist('art-1');
+        $second = $api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4');
         $this->assertSame('Etagged Artist', $second['name'] ?? null, 'The 304 must be served from the ETag memo.');
         $this->assertSame('W/"v1"', $this->calls[1]['headers']['If-None-Match'] ?? null, 'Revalidation must send If-None-Match.');
     }
@@ -200,10 +200,10 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
             json_encode(['images' => [['front' => true, 'image' => 'https://covers.coverartarchive.org/i/image-1']]])
         ));
 
-        $a1 = $api->getFrontCover('rel-memo');
+        $a1 = $api->getFrontCover('094ec1a7-6fea-aae2-2781-9f166f0b2e95');
         // One listing fetch + one image fetch.
         $this->assertCount(2, $this->calls);
-        $a2 = $api->getFrontCover('rel-memo');
+        $a2 = $api->getFrontCover('094ec1a7-6fea-aae2-2781-9f166f0b2e95');
         $this->assertSame($a1, $a2);
         $this->assertCount(2, $this->calls, 'Cover resolution for the same release must not be re-fetched.');
     }

@@ -72,11 +72,14 @@ final class MetadataEnricherBoundaryTest extends TestCase
                     'title' => 'Test Track',
                     'length' => 180000,
                     'score' => 100,
-                    'artist-credit' => [['name' => 'Test Artist', 'artist' => ['id' => 'art-1']]],
+                    'artist-credit' => [[
+                        'name' => 'Test Artist',
+                        'artist' => ['id' => '0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714'],
+                    ]],
                     'releases' => [],
                 ]],
             ]),
-            '/artist/art-1' => (string)json_encode($artistBody),
+            '/artist/0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714' => (string)json_encode($artistBody),
         ];
     }
 
@@ -88,7 +91,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
     {
         $urls = [];
         $enricher = $this->enricher($this->recordingToArtist([
-            'id' => 'art-1',
+            'id' => '0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714',
             'name' => 'Test Artist',
             'type' => 'Person',
             'country' => 'XW',
@@ -118,7 +121,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
                     'length' => 180000,
                     'score' => 100,
                     'artist-credit' => [
-                        ['name' => "Artist\u{200E}Name", 'artist' => ['id' => 'art-1']],
+                        ['name' => "Artist\u{200E}Name", 'artist' => ['id' => '0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714']],
                     ],
                     'releases' => [],
                     'isrcs' => ["USRC\x0112345678"],
@@ -166,7 +169,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
                     'length' => ['not', 'a', 'number'],
                     'score' => 100,
                     'artist-credit' => 'broken',
-                    'releases' => ['art-1'],
+                    'releases' => ['0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714'],
                     'isrcs' => 'notalist',
                 ]],
             ]),
@@ -193,7 +196,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
             $tags[] = ['name' => str_repeat('t', 300) . "\x07", 'count' => $i];
         }
         $enricher = $this->enricher($this->recordingToArtist([
-            'id' => 'art-1',
+            'id' => '0fa4cb6d-5c36-4252-8bd4-94b0f2cf9714',
             'name' => 'Test Artist',
             'tags' => $tags,
             'genres' => 'not-a-list',

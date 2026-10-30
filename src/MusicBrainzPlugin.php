@@ -103,10 +103,21 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         $this->settings = MusicBrainzSettings::fromArray($settings);
         $this->enabled = ($settings['enabled'] ?? false) === true;
 
+        // M-MUSICBRAINZ-25: a settings save rebuilds the throttle/spacing,
+        // but the pending backlog is USER work — dropping it meant every
+        // admin keystroke silently cancelled all awaited enrichments (while
+        // the armed drain timer kept ticking an empty queue). Snapshot,
+        // rebuild, then re-enqueue in FIFO order; the fresh queue's own
+        // de-dup and size cap apply to the carry-over.
+        $backlog = $this->queue->pendingIds();
+        $this->queue = $this->buildQueue();
+        foreach ($backlog as $itemId) {
+            $this->queue->enqueue($itemId);
+        }
+
         // Rebuild API client + throttle from new settings.
         $this->api = $this->buildApi();
         $this->enricher = new MetadataEnricher($this->api, $this->settings, $this->logger);
-        $this->queue = $this->buildQueue();
     }
 
     /**

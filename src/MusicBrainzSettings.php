@@ -21,9 +21,17 @@ namespace Phlix\Plugin\MusicBrainz;
  */
 final class MusicBrainzSettings
 {
-    /** Default MusicBrainz API user agent. */
-    private const DEFAULT_USER_AGENT =
-        'PhlixMusicBrainzPlugin/0.1.0 (https://github.com/detain/phlix-plugin-musicbrainz)';
+    /**
+     * Default MusicBrainz API User-Agent — THE single source (M-MUSICBRAINZ-09/19).
+     *
+     * plugin.json's settings default, the MusicBrainzApi constructor default
+     * and the HttpClient fallback all reference this constant, and the unit
+     * suite pins manifest + code equality, so the identity can never again
+     * freeze at a stale version while the manifest moves on. The version
+     * segment must track plugin.json `version` (test-pinned).
+     */
+    public const DEFAULT_USER_AGENT =
+        'PhlixMusicBrainzPlugin/0.4.0 (https://github.com/detain/phlix-plugin-musicbrainz)';
 
     /**
      * MusicBrainz ToS floor for the API-layer pacing delay, in milliseconds
@@ -53,11 +61,20 @@ final class MusicBrainzSettings
      */
     public static function fromArray(array $data): self
     {
+        $rawUserAgent = is_string($data['user_agent'] ?? null) ? $data['user_agent'] : '';
+        // M-MUSICBRAINZ-13: the UA flows into curl's CURLOPT_USERAGENT and
+        // the workerman header map verbatim — CR/LF (or any C0/C1/DEL) in a
+        // header value is a request-splitting vector, and a control-char
+        // string is never a legitimate identification anyway. Reject the
+        // whole value to the safe default instead of shipping a broken
+        // header (fail-safe: the gate law below still demands `://`).
+        $userAgent = $rawUserAgent !== '' && self::isHeaderSafe($rawUserAgent)
+            ? $rawUserAgent
+            : self::DEFAULT_USER_AGENT;
+
         return new self(
             enabled: (bool)($data['enabled'] ?? false),
-            userAgent: is_string($data['user_agent'] ?? null) && $data['user_agent'] !== ''
-                ? $data['user_agent']
-                : self::DEFAULT_USER_AGENT,
+            userAgent: $userAgent,
             rateLimitDelay: is_int($data['rate_limit_delay'] ?? null) && $data['rate_limit_delay'] > 0
                 ? max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
                 : 1100,
@@ -68,6 +85,18 @@ final class MusicBrainzSettings
                 ? $data['search_depth']
                 : 'normal',
         );
+    }
+
+    /**
+     * Header-value safety: no C0/C1 control or DEL characters, and (a preg
+     * failure on malformed UTF-8 counts as unsafe — we cannot inspect what we
+     * cannot decode, so it must not reach a transport header).
+     */
+    private static function isHeaderSafe(string $value): bool
+    {
+        $controls = preg_match('/\p{Cc}/u', $value);
+
+        return $controls === 0;
     }
 
     /**

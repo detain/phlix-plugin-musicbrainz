@@ -127,13 +127,18 @@ final class HttpClient implements HttpClientInterface
         /** @var array<string, string> $responseHeaders */
         $responseHeaders = [];
         // A blank User-Agent would violate the MusicBrainz etiquette contract
-        // AND curl_setopt_array's non-empty-string option shape; the default
-        // identity below keeps the request legal (single-source is owed by
-        // M-MUSICBRAINZ-09/19, batch W-min67).
+        // AND curl_setopt_array's non-empty-string option shape; the
+        // single-source identity below keeps the request legal
+        // (M-MUSICBRAINZ-09/19/21). The UA is removed from the custom-header
+        // map because curl sends explicit header lines INSTEAD of
+        // CURLOPT_USERAGENT — an empty "User-Agent:" line would win on the
+        // wire and the fallback would be a lie (proved by
+        // MusicBrainzUserAgentTest against a live local socket).
         $userAgent = $headers['User-Agent'] ?? '';
         if ($userAgent === '') {
-            $userAgent = 'PhlixMusicBrainzPlugin/0.1.0';
+            $userAgent = MusicBrainzSettings::DEFAULT_USER_AGENT;
         }
+        unset($headers['User-Agent']);
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,

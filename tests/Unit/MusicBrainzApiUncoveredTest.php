@@ -36,7 +36,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getRecording('mbid-123');
+        $result = $api->getRecording('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNull($result);
     }
@@ -46,13 +46,13 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         $httpClient = new class implements HttpClientInterface {
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
-                if (str_contains($url, '/recording/mbid-123')) {
+                if (str_contains($url, '/recording/54736453-1283-7eb6-02ab-1bae8501ee4c')) {
                     return HttpResponse::fromBody(is_string(json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'title' => 'Test Recording',
                         'length' => 200000,
                     ])) ? (string)json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'title' => 'Test Recording',
                         'length' => 200000,
                     ]) : null);
@@ -62,10 +62,10 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getRecording('mbid-123');
+        $result = $api->getRecording('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNotNull($result);
-        $this->assertSame('mbid-123', $result['id']);
+        $this->assertSame('54736453-1283-7eb6-02ab-1bae8501ee4c', $result['id']);
         $this->assertSame('Test Recording', $result['title']);
     }
 
@@ -79,7 +79,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getRelease('mbid-123');
+        $result = $api->getRelease('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNull($result);
     }
@@ -89,13 +89,13 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         $httpClient = new class implements HttpClientInterface {
             public function get(string $url, array $headers = [], array $query = []): HttpResponse
             {
-                if (str_contains($url, '/release/mbid-123')) {
+                if (str_contains($url, '/release/54736453-1283-7eb6-02ab-1bae8501ee4c')) {
                     return HttpResponse::fromBody(is_string(json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'title' => 'Test Release',
                         'date' => '2024-01-01',
                     ])) ? (string)json_encode([
-                        'id' => 'mbid-123',
+                        'id' => '54736453-1283-7eb6-02ab-1bae8501ee4c',
                         'title' => 'Test Release',
                         'date' => '2024-01-01',
                     ]) : null);
@@ -105,10 +105,10 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getRelease('mbid-123');
+        $result = $api->getRelease('54736453-1283-7eb6-02ab-1bae8501ee4c');
 
         $this->assertNotNull($result);
-        $this->assertSame('mbid-123', $result['id']);
+        $this->assertSame('54736453-1283-7eb6-02ab-1bae8501ee4c', $result['id']);
         $this->assertSame('Test Release', $result['title']);
     }
 
@@ -126,7 +126,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getCoverArt('release-mbid');
+        $result = $api->getCoverArt('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNull($result);
     }
@@ -144,7 +144,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getCoverArt('release-mbid');
+        $result = $api->getCoverArt('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNull($result);
     }
@@ -162,7 +162,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getFrontCover('release-mbid');
+        $result = $api->getFrontCover('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNull($result);
     }
@@ -180,11 +180,11 @@ final class MusicBrainzApiUncoveredTest extends TestCase
                 if (str_contains($url, 'coverartarchive.org')) {
                     return HttpResponse::fromBody(is_string(json_encode([
                         'images' => [
-                            ['front' => false, 'types' => ['Primary'], 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-7'],
+                            ['front' => false, 'types' => ['Primary'], 'image' => 'https://covers.coverartarchive.org/release/46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2/image-7'],
                         ],
                     ])) ? (string)json_encode([
                         'images' => [
-                            ['front' => false, 'types' => ['Primary'], 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-7'],
+                            ['front' => false, 'types' => ['Primary'], 'image' => 'https://covers.coverartarchive.org/release/46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2/image-7'],
                         ],
                     ]) : null);
                 }
@@ -193,7 +193,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getFrontCover('release-mbid');
+        $result = $api->getFrontCover('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNotNull($result);
         $this->assertIsString($result);
@@ -213,11 +213,11 @@ final class MusicBrainzApiUncoveredTest extends TestCase
                 if (str_contains($url, 'coverartarchive.org')) {
                     return HttpResponse::fromBody(is_string(json_encode([
                         'images' => [
-                            ['front' => false, 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-9'],
+                            ['front' => false, 'image' => 'https://covers.coverartarchive.org/release/46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2/image-9'],
                         ],
                     ])) ? (string)json_encode([
                         'images' => [
-                            ['front' => false, 'image' => 'https://covers.coverartarchive.org/release/release-mbid/image-9'],
+                            ['front' => false, 'image' => 'https://covers.coverartarchive.org/release/46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2/image-9'],
                         ],
                     ]) : null);
                 }
@@ -226,7 +226,7 @@ final class MusicBrainzApiUncoveredTest extends TestCase
         };
 
         $api = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 0);
-        $result = $api->getFrontCover('release-mbid');
+        $result = $api->getFrontCover('46e86bb0-da81-fc70-4f3a-17ae0ab7c8e2');
 
         $this->assertNotNull($result);
     }
