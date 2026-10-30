@@ -269,6 +269,7 @@ final class MetadataEnricher
         $credit = self::rowAt($recording, 'artist-credit', 0);
         $creditArtist = is_array($credit['artist'] ?? null) ? $credit['artist'] : [];
         $isrcs = is_array($recording['isrcs'] ?? null) ? $recording['isrcs'] : [];
+        $credits = self::artistCredits($recording);
 
         return [
             'mbid' => self::strField($recording, 'id', 64),
@@ -279,7 +280,91 @@ final class MetadataEnricher
             'isrc' => self::strValue($isrcs[0] ?? null, 32),
             'artist_mbid' => self::strField($creditArtist, 'id', 64),
             'artist_name' => self::strField($credit, 'name'),
+            // M-MUSICBRAINZ-30: the full ordered credit (featured artists,
+            // credited-as names, joinphrases), not just row [0]. The two
+            // keys above stay first-credit for backward compatibility.
+            'artist_credits' => $credits,
+            'artist_credit_display' => self::artistCreditDisplay($credits),
         ];
+    }
+
+    /**
+     * Parse the complete MusicBrainz `artist-credit` list.
+     *
+     * Each row carries a display `name` ("credited-as" when it differs from
+     * the canonical artist), the canonical artist's `id`, and the
+     * `joinphrase` linking the row to the next. Hostile shapes parse away
+     * the same way every other inbound value does (scrubbed, capped, null
+     * when unparseable).
+     *
+     * @param array<string, mixed> $node Recording or release entity.
+     *
+     * @return list<array{name: ?string, mbid: ?string, joinphrase: ?string}>
+     */
+    private static function artistCredits(array $node): array
+    {
+        $rows = is_array($node['artist-credit'] ?? null) ? $node['artist-credit'] : [];
+
+        $credits = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $artist = is_array($row['artist'] ?? null) ? $row['artist'] : [];
+            $credits[] = [
+                'name' => self::strField($row, 'name'),
+                'mbid' => self::strField($artist, 'id', 64),
+                'joinphrase' => self::joinPhrase($row['joinphrase'] ?? null),
+            ];
+        }
+
+        return $credits;
+    }
+
+    /**
+     * Parse a `joinphrase`: control/format scrub and length cap like every
+     * other inbound value, but NO trimming — for joinphrases the leading and
+     * trailing spaces ARE the content (" feat. " must render as such, not
+     * as "feat."). Whitespace-only parses to null (nothing to join with).
+     */
+    private static function joinPhrase(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $clean = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value);
+        if ($clean === null) {
+            $clean = preg_replace('/[\x00-\x1F\x7F]/', '', $value) ?? '';
+        }
+
+        if (trim($clean) === '') {
+            return null;
+        }
+
+        if (preg_match('/^.{0,64}/u', $clean, $match) === 1) {
+            return $match[0];
+        }
+
+        return substr($clean, 0, 64);
+    }
+
+    /**
+     * Render the parsed credit rows as the full display string MusicBrainz
+     * itself shows ("Queen feat. David Bowie"), null when nothing survives.
+     *
+     * @param list<array{name: ?string, mbid: ?string, joinphrase: ?string}> $credits
+     */
+    private static function artistCreditDisplay(array $credits): ?string
+    {
+        $line = '';
+        foreach ($credits as $credit) {
+            $line .= ($credit['name'] ?? '') . ($credit['joinphrase'] ?? '');
+        }
+
+        $line = trim($line);
+
+        return $line === '' ? null : $line;
     }
 
     /**
@@ -287,6 +372,14 @@ final class MetadataEnricher
      *
      * Same boundary parse as {@see self::extractRecordingData()}: only
      * scrubbed, capped scalars are persisted.
+     *
+     * Date law: the `date` field is persisted raw as MusicBrainz publishes
+     * it — a complete 'YYYY-MM-DD' or a PARTIAL 'YYYY' / 'YYYY-MM' (MB
+     * releases legitimately carry year- or year-month-only dates). Partial
+     * values are ISO-8601 string-sort-safe, but they are NOT full dates:
+     * consumers doing SQL `DATE()`, month arithmetic, or strict
+     * 'Y-m-d' parsing on the column must tolerate (or normalize) the
+     * partial shapes first (M-MUSICBRAINZ-24).
      */
     private function fetchAlbumData(string $mbid): array
     {
@@ -298,6 +391,7 @@ final class MetadataEnricher
         $labelInfo = self::rowAt($release, 'label-info', 0);
         $credit = self::rowAt($release, 'artist-credit', 0);
         $creditArtist = is_array($credit['artist'] ?? null) ? $credit['artist'] : [];
+        $credits = self::artistCredits($release);
 
         return [
             'mbid' => self::strField($release, 'id', 64),
@@ -311,6 +405,9 @@ final class MetadataEnricher
             'asin' => self::strField($release, 'asin', 32),
             'artist_mbid' => self::strField($creditArtist, 'id', 64),
             'artist_name' => self::strField($credit, 'name'),
+            // M-MUSICBRAINZ-30: full ordered credit on the release path too.
+            'artist_credits' => $credits,
+            'artist_credit_display' => self::artistCreditDisplay($credits),
         ];
     }
 

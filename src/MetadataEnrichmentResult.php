@@ -24,7 +24,9 @@ final class MetadataEnrichmentResult
     /**
      * @param array<string, mixed> $artistData Artist metadata from MusicBrainz
      * @param array<string, mixed> $albumData Album/release metadata from MusicBrainz
-     * @param array<int, array<string, mixed>> $trackData Track metadata from MusicBrainz
+     * @param array<string, mixed> $trackData ONE flat track record, as parsed by
+     *                                        MetadataEnricher::extractRecordingData() —
+     *                                        not a list of tracks
      * @param string|null $albumArtBase64 Base64-encoded album artwork
      */
     public function __construct(
@@ -50,6 +52,11 @@ final class MetadataEnrichmentResult
 
     /**
      * Convert to array for storage.
+     *
+     * The `'tracks'` key is a legacy misnomer kept for wire/storage
+     * compatibility: it holds the SINGLE flat track record from
+     * {@see self::$trackData}, not a list (M-MUSICBRAINZ-22). Readers must
+     * treat it as one `array<string, mixed>` record.
      *
      * @return array<string, mixed>
      */
