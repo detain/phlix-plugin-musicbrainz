@@ -19,66 +19,6 @@ parameters:
 			path: src/HttpClient.php
 
 		-
-			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
-			identifier: foreach.nonIterable
-			count: 2
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Binary operation "\+\=" between mixed and 15 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Binary operation "\+\=" between mixed and 20 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Binary operation "/" between mixed and 1000 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Cannot access offset ''artist'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Cannot access offset ''catalog\-number'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Cannot access offset ''id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Cannot access offset ''name'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 7
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 5
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Expression on left side of \?\? is always null\.$#'
-			identifier: nullCoalesce.expr
-			count: 4
-			path: src/MetadataEnricher.php
-
-		-
 			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:extractRecordingData\(\) has parameter \$recording with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -105,30 +45,6 @@ parameters:
 		-
 			message: '#^Method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:selectBestRecording\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Parameter \#1 \$haystack of function stripos expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Parameter \#1 \$mbid of method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchAlbumData\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Parameter \#1 \$mbid of method Phlix\\Plugin\\MusicBrainz\\MetadataEnricher\:\:fetchArtistData\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/MetadataEnricher.php
-
-		-
-			message: '#^Parameter \#1 \$releaseMbid of method Phlix\\Plugin\\MusicBrainz\\MusicBrainzApi\:\:getFrontCover\(\) expects string, mixed given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/MetadataEnricher.php
 

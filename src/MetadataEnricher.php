@@ -73,7 +73,7 @@ final class MetadataEnricher
                 $recording = $this->selectBestRecording($results, $title, $artist, $duration);
                 if ($recording !== null) {
                     $trackData = $this->extractRecordingData($recording);
-                    $albumMbid = $recording['releases'][0]['id'] ?? null ?? null;
+                    $albumMbid = self::firstId($recording['releases'] ?? null);
                     if ($albumMbid !== null) {
                         $albumData = $this->fetchAlbumData($albumMbid);
                         if ($this->settings->fetchAlbumArt && !empty($albumData)) {
@@ -92,19 +92,16 @@ final class MetadataEnricher
                     $trackData = $this->extractRecordingData($recording);
 
                     // Get album from recording
-                    $releases = $recording['releases'] ?? [];
-                    if (count($releases) > 0) {
-                        $albumMbid = $releases[0]['id'] ?? null;
-                        if ($albumMbid !== null) {
-                            $albumData = $this->fetchAlbumData($albumMbid);
-                            if ($this->settings->fetchAlbumArt && !empty($albumData)) {
-                                $albumArtBase64 = $this->api->getFrontCover($albumMbid);
-                            }
+                    $albumMbid = self::firstId($recording['releases'] ?? null);
+                    if ($albumMbid !== null) {
+                        $albumData = $this->fetchAlbumData($albumMbid);
+                        if ($this->settings->fetchAlbumArt && !empty($albumData)) {
+                            $albumArtBase64 = $this->api->getFrontCover($albumMbid);
                         }
                     }
 
                     // Get artist from recording
-                    $artistMbid = $recording['artist-credit'][0]['artist']['id'] ?? null ?? null;
+                    $artistMbid = self::firstArtistCreditId($recording['artist-credit'] ?? null);
                     if ($artistMbid !== null) {
                         $artistData = $this->fetchArtistData($artistMbid);
                     }
@@ -119,8 +116,7 @@ final class MetadataEnricher
                 }
                 $releaseResults = $this->api->searchReleases($releaseQuery, 5);
                 if (count($releaseResults) > 0) {
-                    $release = $releaseResults[0];
-                    $albumMbid = $release['id'] ?? null;
+                    $albumMbid = self::firstId($releaseResults);
                     if ($albumMbid !== null) {
                         $albumData = $this->fetchAlbumData($albumMbid);
                         if ($this->settings->fetchAlbumArt && !empty($albumData)) {
@@ -134,7 +130,7 @@ final class MetadataEnricher
             if ($this->settings->searchDepth === 'deep' && empty($artistData) && $artist !== null) {
                 $artistResults = $this->api->searchArtists(self::lucenePhrase($artist), 5);
                 if (count($artistResults) > 0) {
-                    $artistMbid = $artistResults[0]['id'] ?? null;
+                    $artistMbid = self::firstId($artistResults);
                     if ($artistMbid !== null) {
                         $artistData = $this->fetchArtistData($artistMbid);
                     }
@@ -228,19 +224,21 @@ final class MetadataEnricher
         $bestScore = 0;
 
         foreach ($results as $recording) {
-            $score = $recording['score'] ?? 0;
+            $rawScore = $recording['score'] ?? 0;
+            $score = is_numeric($rawScore) ? (float)$rawScore : 0;
 
             // Boost score if artist matches
             if ($artist !== null) {
-                $recordingArtist = $recording['artist-credit'][0]['name'] ?? '';
-                if (stripos($recordingArtist, $artist) !== false) {
+                $creditRow = self::rowAt($recording, 'artist-credit', 0);
+                $recordingArtist = self::strField($creditRow, 'name') ?? '';
+                if ($recordingArtist !== '' && stripos($recordingArtist, $artist) !== false) {
                     $score += 20;
                 }
             }
 
             // Boost score if duration is close (±10 seconds)
             if ($duration !== null) {
-                $recordingDuration = $recording['length'] ?? 0;
+                $recordingDuration = self::intField($recording, 'length') ?? 0;
                 if ($recordingDuration > 0) {
                     $durationDiff = abs(($recordingDuration / 1000) - $duration);
                     if ($durationDiff <= 10) {
@@ -260,23 +258,35 @@ final class MetadataEnricher
 
     /**
      * Extract track data from a MusicBrainz recording.
+     *
+     * Every value crosses the network boundary as untrusted mixed and is
+     * parsed here: strings are scrubbed of control/format characters and
+     * length-capped, numerics must be numeric, so nothing hostile can be
+     * persisted verbatim into `metadata_json`.
      */
     private function extractRecordingData(array $recording): array
     {
+        $credit = self::rowAt($recording, 'artist-credit', 0);
+        $creditArtist = is_array($credit['artist'] ?? null) ? $credit['artist'] : [];
+        $isrcs = is_array($recording['isrcs'] ?? null) ? $recording['isrcs'] : [];
+
         return [
-            'mbid' => $recording['id'] ?? null,
-            'title' => $recording['title'] ?? null,
-            'duration' => $recording['length'] ?? null,
-            'position' => $recording['position'] ?? null,
-            'number' => $recording['number'] ?? null,
-            'isrc' => $recording['isrcs'][0] ?? null ?? null,
-            'artist_mbid' => $recording['artist-credit'][0]['artist']['id'] ?? null,
-            'artist_name' => $recording['artist-credit'][0]['name'] ?? null,
+            'mbid' => self::strField($recording, 'id', 64),
+            'title' => self::strField($recording, 'title'),
+            'duration' => self::intField($recording, 'length'),
+            'position' => self::intField($recording, 'position'),
+            'number' => self::intField($recording, 'number'),
+            'isrc' => self::strValue($isrcs[0] ?? null, 32),
+            'artist_mbid' => self::strField($creditArtist, 'id', 64),
+            'artist_name' => self::strField($credit, 'name'),
         ];
     }
 
     /**
      * Fetch and extract album data from a MusicBrainz release.
+     *
+     * Same boundary parse as {@see self::extractRecordingData()}: only
+     * scrubbed, capped scalars are persisted.
      */
     private function fetchAlbumData(string $mbid): array
     {
@@ -285,23 +295,32 @@ final class MetadataEnricher
             return [];
         }
 
+        $labelInfo = self::rowAt($release, 'label-info', 0);
+        $credit = self::rowAt($release, 'artist-credit', 0);
+        $creditArtist = is_array($credit['artist'] ?? null) ? $credit['artist'] : [];
+
         return [
-            'mbid' => $release['id'] ?? null,
-            'title' => $release['title'] ?? null,
-            'date' => $release['date'] ?? null,
-            'country' => $release['country'] ?? null,
-            'barcode' => $release['barcode'] ?? null,
-            'label' => $release['label-info'][0]['name'] ?? null ?? null,
-            'catalog_number' => $release['label-info'][0]['catalog-number'] ?? null,
-            'media_format' => $release['media-format'] ?? null,
-            'asin' => $release['asin'] ?? null,
-            'artist_mbid' => $release['artist-credit'][0]['artist']['id'] ?? null,
-            'artist_name' => $release['artist-credit'][0]['name'] ?? null,
+            'mbid' => self::strField($release, 'id', 64),
+            'title' => self::strField($release, 'title'),
+            'date' => self::strField($release, 'date', 32),
+            'country' => self::strField($release, 'country', 16),
+            'barcode' => self::strField($release, 'barcode', 64),
+            'label' => self::strField($labelInfo, 'name'),
+            'catalog_number' => self::strField($labelInfo, 'catalog-number', 64),
+            'media_format' => self::strField($release, 'media-format'),
+            'asin' => self::strField($release, 'asin', 32),
+            'artist_mbid' => self::strField($creditArtist, 'id', 64),
+            'artist_name' => self::strField($credit, 'name'),
         ];
     }
 
     /**
      * Fetch and extract artist data from MusicBrainz.
+     *
+     * M-MUSICBRAINZ-06: begin/end DATES come from the `life-span` object;
+     * the `begin-area`/`end-area` objects are PLACE NAMES and are persisted
+     * under their own `begin_area`/`end_area` keys. The old mapping stored
+     * area names (e.g. "New York") under `begin_date`/`end_date`.
      */
     private function fetchArtistData(string $mbid): array
     {
@@ -310,27 +329,155 @@ final class MetadataEnricher
             return [];
         }
 
-        $tags = [];
-        foreach ($artist['tags'] ?? [] as $tag) {
-            $tags[] = $tag['name'];
-        }
-
-        $genres = [];
-        foreach ($artist['genres'] ?? [] as $genre) {
-            $genres[] = $genre['name'];
-        }
+        $lifeSpan = is_array($artist['life-span'] ?? null) ? $artist['life-span'] : [];
+        $beginArea = is_array($artist['begin-area'] ?? null) ? $artist['begin-area'] : [];
+        $endArea = is_array($artist['end-area'] ?? null) ? $artist['end-area'] : [];
 
         return [
-            'mbid' => $artist['id'] ?? null,
-            'name' => $artist['name'] ?? null,
-            'sort_name' => $artist['sort-name'] ?? null,
-            'type' => $artist['type'] ?? null,
-            'country' => $artist['country'] ?? null,
-            'begin_date' => $artist['begin-area']['name'] ?? null,
-            'end_date' => $artist['end-area']['name'] ?? null,
-            'disambiguation' => $artist['disambiguation'] ?? null,
-            'tags' => $tags,
-            'genres' => $genres,
+            'mbid' => self::strField($artist, 'id', 64),
+            'name' => self::strField($artist, 'name'),
+            'sort_name' => self::strField($artist, 'sort-name'),
+            'type' => self::strField($artist, 'type', 64),
+            'country' => self::strField($artist, 'country', 16),
+            'begin_date' => self::strField($lifeSpan, 'begin', 32),
+            'end_date' => self::strField($lifeSpan, 'end', 32),
+            'ended' => is_bool($lifeSpan['ended'] ?? null) ? $lifeSpan['ended'] : null,
+            'begin_area' => self::strField($beginArea, 'name'),
+            'end_area' => self::strField($endArea, 'name'),
+            'disambiguation' => self::strField($artist, 'disambiguation'),
+            'tags' => self::nameList($artist['tags'] ?? null),
+            'genres' => self::nameList($artist['genres'] ?? null),
         ];
+    }
+
+    /**
+     * First row of a nested list (e.g. `artist-credit[0]`) as an array,
+     * or an empty array when the path does not describe a row.
+     *
+     * @param array<string, mixed> $row
+     * @return array<array-key, mixed>
+     */
+    private static function rowAt(array $row, string $key, int $index): array
+    {
+        $list = is_array($row[$key] ?? null) ? $row[$key] : [];
+        $item = $list[$index] ?? null;
+
+        return is_array($item) ? $item : [];
+    }
+
+    /**
+     * The `id` of the first row in a remote list (releases, artist search
+     * results…) as a validated short string — the only shape safe to feed
+     * into the strict-typed lookup methods.
+     */
+    private static function firstId(mixed $rows): ?string
+    {
+        if (!is_array($rows)) {
+            return null;
+        }
+
+        $first = reset($rows);
+
+        return is_array($first) ? self::strField($first, 'id', 64) : null;
+    }
+
+    /**
+     * The artist MBID of the first `artist-credit` entry.
+     */
+    private static function firstArtistCreditId(mixed $credits): ?string
+    {
+        if (!is_array($credits)) {
+            return null;
+        }
+
+        $first = reset($credits);
+        if (!is_array($first)) {
+            return null;
+        }
+
+        $artist = is_array($first['artist'] ?? null) ? $first['artist'] : [];
+
+        return self::strField($artist, 'id', 64);
+    }
+
+    /**
+     * Parse one inbound remote value: scrub C0/C1 control and Unicode
+     * format characters, trim, cap at $cap codepoints. Anything that is not
+     * a (renderable) string parses away to null.
+     */
+    private static function strValue(mixed $value, int $cap = 256): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $clean = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value);
+        if ($clean === null) {
+            // Invalid UTF-8: fall back to ASCII control scrub; the value is
+            // already length-bounded by the JSON decode.
+            $clean = preg_replace('/[\x00-\x1F\x7F]/', '', $value) ?? '';
+        }
+
+        $clean = trim($clean);
+        if ($clean === '') {
+            return null;
+        }
+
+        if (preg_match('/^.{0,' . $cap . '}/u', $clean, $match) === 1) {
+            return $match[0];
+        }
+
+        return substr($clean, 0, $cap);
+    }
+
+    /**
+     * Parse one field of a remote row through {@see self::strValue()}.
+     *
+     * @param array<array-key, mixed> $row
+     */
+    private static function strField(array $row, string $key, int $cap = 256): ?string
+    {
+        return self::strValue($row[$key] ?? null, $cap);
+    }
+
+    /**
+     * Parse a remote numeric field to int (null when not numeric).
+     *
+     * @param array<array-key, mixed> $row
+     */
+    private static function intField(array $row, string $key): ?int
+    {
+        $value = $row[$key] ?? null;
+        if (is_bool($value) || !is_scalar($value) || !is_numeric($value)) {
+            return null;
+        }
+
+        return (int)$value;
+    }
+
+    /**
+     * Parse a remote tag/genre list into a bounded list of scrubbed names.
+     *
+     * @return array<int, string>
+     */
+    private static function nameList(mixed $rows, int $maxItems = 50, int $cap = 128): array
+    {
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $names = [];
+        foreach ($rows as $row) {
+            if (count($names) >= $maxItems) {
+                break;
+            }
+
+            $name = is_array($row) ? self::strField($row, 'name', $cap) : self::strValue($row, $cap);
+            if ($name !== null) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
     }
 }
