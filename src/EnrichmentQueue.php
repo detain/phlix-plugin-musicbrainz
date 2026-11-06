@@ -16,7 +16,7 @@ namespace Phlix\Plugin\MusicBrainz;
  * with a hard minimum spacing between dispatches.
  *
  * The scan/job worker fires `MediaItemAdded` once per newly-persisted file.
- * Enriching inline inside that handler would serialise the entire scan on
+ * Enriching inline inside that handler would serialize the entire scan on
  * MusicBrainz's 1-request-per-second etiquette (a 1000-track library would
  * add tens of minutes to every scan and stall the worker's event loop). So
  * the handler only ever *enqueues* here; a background drain (a Workerman
@@ -41,7 +41,7 @@ final class EnrichmentQueue
     /** @var list<string> FIFO of pending media-item IDs. */
     private array $queue = [];
 
-    /** @var array<string, true> Membership set for O(1) de-duplication. */
+    /** @var array<string, true> Membership set for O(1) deduplication. */
     private array $pending = [];
 
     /** Monotonic timestamp (seconds) of the last dispatch, null if none yet. */
@@ -74,7 +74,7 @@ final class EnrichmentQueue
     /**
      * Add a media-item ID to the queue.
      *
-     * De-duplicates against items already pending and refuses to grow past
+     * Deduplicates against items already pending and refuses to grow past
      * {@see self::$maxSize}.
      *
      * @param string $itemId Media item UUID.

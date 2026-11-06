@@ -14,7 +14,7 @@ music items with comprehensive metadata:
 - **Artist metadata** — name, sort name, aliases, type, country, begin/end
   dates and areas, disambiguation, tags, genres
 - **Album metadata** — release date, country, label, catalog number, barcode,
-  media format, ASIN, full artist credit (featured artists and joinphrases)
+  media format, ASIN, full artist credit (featured artists and join phrases)
 - **Track metadata** — track number, position, duration (`duration_ms`,
   milliseconds — the host's own `duration` is seconds), ISRC codes, full
   artist credit
@@ -47,7 +47,7 @@ All settings are optional — MusicBrainz is an open service, so no API key is r
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master on/off for MusicBrainz enrichment. Optional; default off. No API key needed — MusicBrainz is an open service. |
-| `user_agent` | string | `PhlixMusicBrainzPlugin/0.4.0 (…)` | Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). **Enforced:** the plugin only runs enrichment when the value contains a URL (the `://` substring) — an email-only contact like `MyFork/1.0 (me@example.com)` FAILS the gate and the plugin stays a no-op; include a project/contact URL (an email may sit alongside it). Optional — the default is fine; customise if you run a fork. See [MusicBrainz API etiquette](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting). |
+| `user_agent` | string | `PhlixMusicBrainzPlugin/0.4.0 (…)` | Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). **Enforced:** the plugin only runs enrichment when the value contains a URL (the `://` substring) — an email-only UA fails the gate; the plugin silently declines to enqueue or enrich (e.g. `MyFork/1.0 (me@example.com)`). Include a project/contact URL (an email may sit alongside it). Optional — the default is fine; customize if you run a fork. See [MusicBrainz API etiquette](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting). |
 | `rate_limit_delay` | integer | `1100` | Minimum delay between MusicBrainz requests (ms). Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). Values below 1000 are raised to the 1000 ms ToS floor; non-integer or ≤0 values fall back to the 1100 default. |
 | `auto_enrich` | boolean | `true` | Automatically enrich music items as they are scanned. Optional; default on. |
 | `fetch_album_art` | boolean | `true` | Pull cover art via the Cover Art Archive. Optional; default on. |
@@ -87,9 +87,9 @@ a configurable delay (default 1100ms) between all API calls, and
 1s) so the budget holds across a whole scan. Please configure a valid
 `user_agent` with contact information so MusicBrainz can reach you if there are
 issues. The gate is enforced, not advisory: a `user_agent` without a URL (the
-`://` substring) — e.g. an email-only contact — makes `isConfigured()` false and
-the plugin silently declines to enqueue or enrich anything. Put a project or
-contact URL in the UA; add your e-mail alongside it if you like.
+`://` substring) makes `isConfigured()` false — an email-only UA fails the gate;
+the plugin silently declines to enqueue or enrich. Put a project or contact URL
+in the UA; add your email alongside it if you like.
 
 ## License
 

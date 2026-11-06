@@ -42,7 +42,12 @@ jobs:
           coverage-reports: ./coverage.xml
 
       - name: Run PHPStan
-        run: vendor/bin/phpstan analyse src --level=9
+        # The composer script carries '-c phpstan.neon' explicitly: that file
+        # is where the zero-baseline doctrine lives (level 9, src paths, and
+        # the bootstrapFiles stub wiring). Relying on phpstan's cwd
+        # autodiscovery would silently analyse src without the host-class
+        # stubs if the cwd or discovery ever changed.
+        run: composer phpstan
 
       - name: Run PHPCS
         run: vendor/bin/phpcs src --standard=PSR12

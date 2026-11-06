@@ -40,7 +40,7 @@ use Psr\Log\NullLogger;
  * ## Deferred, throttled enrichment (never inline during a scan)
  *
  * MusicBrainz asks for no more than one request per second. Enriching inline
- * inside the `MediaItemAdded` handler would serialise the whole scan on that
+ * inside the `MediaItemAdded` handler would serialize the whole scan on that
  * 1-req/s budget and stall the worker's event loop. So the handler ONLY
  * enqueues the item ({@see EnrichmentQueue}); a background drain
  * ({@see self::drainOne()}, driven by a `Workerman\Timer` in production)
@@ -103,7 +103,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     {
         $this->settings = MusicBrainzSettings::fromArray($settings);
         // M-MUSICBRAINZ-26: one enabled-truth. The settings object already
-        // normalises the raw value with a (bool) cast; re-reading the raw
+        // normalizes the raw value with a (bool) cast; re-reading the raw
         // array with a strict === true compare gave plugin and settings a
         // split vote for any truthy non-bool (e.g. 1) — the plugin stayed
         // dead while the admin UI showed it enabled.
@@ -114,7 +114,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         // admin keystroke silently cancelled all awaited enrichments (while
         // the armed drain timer kept ticking an empty queue). Snapshot,
         // rebuild, then re-enqueue in FIFO order; the fresh queue's own
-        // de-dup and size cap apply to the carry-over.
+        // dedup and size cap apply to the carry-over.
         $backlog = $this->queue->pendingIds();
         $this->queue = $this->buildQueue();
         foreach ($backlog as $itemId) {
@@ -192,7 +192,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     /**
      * Handle a newly-added media item: enqueue it for deferred, throttled
      * enrichment. Does NO network/DB work — enrichment happens later in
-     * {@see self::drainOne()} so a scan is never serialised on MusicBrainz's
+     * {@see self::drainOne()} so a scan is never serialized on MusicBrainz's
      * 1-req/s budget.
      *
      * @param MediaItemAdded $event

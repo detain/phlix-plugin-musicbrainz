@@ -51,17 +51,20 @@ if (!class_exists(\Phlix\Media\Library\ItemRepository::class)) {
 /**
  * Stub for host-supplied Phlix\Media\Library\MediaItem class.
  *
- * Mirrors the pattern used in other plugin tests.
+ * Mirrors the pattern used in other plugin tests. The promoted properties are
+ * readonly so this runtime stub and the phpstan-side tests/Stub/PhlixMediaItem
+ * agree on the mirrored shape (the zero-baseline scheme promises verbatim
+ * signatures); src/ and tests/ only ever read items, never mutate them.
  */
 if (!class_exists(\Phlix\Media\Library\MediaItem::class)) {
     final class MediaItemStubForMusicBrainz
     {
         public function __construct(
-            public string $id,
-            public string $name,
-            public string $type,
-            public string $path,
-            public array $metadata = [],
+            public readonly string $id,
+            public readonly string $name,
+            public readonly string $type,
+            public readonly string $path,
+            public readonly array $metadata = [],
         ) {
         }
 

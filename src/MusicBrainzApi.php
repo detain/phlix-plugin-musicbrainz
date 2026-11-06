@@ -662,7 +662,7 @@ final class MusicBrainzApi
         }
 
         if (!self::isSafeCoverArtUrl($url)) {
-            $this->logger->warning('MusicBrainz: refused non-coverart image URL', [
+            $this->logger->warning('MusicBrainz: refused image URL outside coverartarchive.org', [
                 'url' => substr($url, 0, 256),
             ]);
 
