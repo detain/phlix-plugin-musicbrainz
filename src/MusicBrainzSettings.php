@@ -43,6 +43,19 @@ final class MusicBrainzSettings
     public const MIN_RATE_LIMIT_DELAY_MS = 1000;
 
     /**
+     * Ceiling for the API-layer pacing delay, in milliseconds
+     * (M-MUSICBRAINZ-39): the floor bounds courtesy downward, this bounds
+     * self-harm upward. The parsed value feeds per-request pacing, queue
+     * dispatch spacing and the Workerman drain-timer interval at once, so a
+     * mistyped 110000 (ms-vs-seconds confusion) used to space every item by
+     * two minutes — and 999999999 parked the pipeline for days — silently.
+     * 60000 mirrors the API layer's own MAX_BACKOFF_MS ceiling; plugin.json
+     * and the README state it, pinned against this constant itself by
+     * PluginManifestReadmeMirrorTest so prose and parse cannot drift apart.
+     */
+    public const MAX_RATE_LIMIT_DELAY_MS = 60000;
+
+    /**
      * The exact field set the SPA projection exposes (M-MUSICBRAINZ-36): a
      * future persistence field stays OUT of the SPA payload until it is
      * declared here. The projection is derived over this list from
@@ -99,8 +112,16 @@ final class MusicBrainzSettings
             // touch; the entry point itself is fail-closed.
             enabled: self::parseStrictBool($data['enabled'] ?? null, false),
             userAgent: $userAgent,
+            // M-MUSICBRAINZ-39: bounded on BOTH sides at this single parse
+            // boundary. The floor (upward clamp) shipped long ago; the
+            // ceiling is new — an admin typo can no longer park enrichment
+            // forever, because the value feeding pacing, dispatch spacing
+            // and the drain timer can never exceed MAX_RATE_LIMIT_DELAY_MS.
             rateLimitDelay: is_int($data['rate_limit_delay'] ?? null) && $data['rate_limit_delay'] > 0
-                ? max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
+                ? min(
+                    self::MAX_RATE_LIMIT_DELAY_MS,
+                    max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
+                )
                 : 1100,
             autoEnrich: (bool)($data['auto_enrich'] ?? true),
             fetchAlbumArt: (bool)($data['fetch_album_art'] ?? true),

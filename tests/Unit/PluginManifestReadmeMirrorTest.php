@@ -21,6 +21,7 @@ declare(strict_types=1);
 namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
 use PHPUnit\Framework\TestCase;
+use Phlix\Plugin\MusicBrainz\MusicBrainzSettings;
 
 final class PluginManifestReadmeMirrorTest extends TestCase
 {
@@ -100,6 +101,28 @@ final class PluginManifestReadmeMirrorTest extends TestCase
             'fall back to the 1100 default',
             $description,
             'The manifest must state the non-integer/<=0 fallback the settings layer actually performs.'
+        );
+    }
+
+    /**
+     * M-MUSICBRAINZ-39 manifest truth: the admin-UI copy must state the
+     * bounds the settings layer enforces — floor AND ceiling — and it must
+     * state the SAME numbers the code parses to. A hand-edited digit in
+     * either surface re-drifts the mirror silently otherwise.
+     */
+    public function testRateLimitRowDisclosesBothBoundsAndMatchesTheCodeConstants(): void
+    {
+        $description = (string)($this->manifestSettings()['rate_limit_delay']['description'] ?? '');
+
+        $this->assertStringContainsString(
+            'raised to the ' . MusicBrainzSettings::MIN_RATE_LIMIT_DELAY_MS . ' ms ToS floor',
+            $description,
+            'The manifest must state the floor from the same constant the parse uses.'
+        );
+        $this->assertStringContainsString(
+            'capped at the ' . MusicBrainzSettings::MAX_RATE_LIMIT_DELAY_MS . ' ms ceiling',
+            $description,
+            'The manifest must state the ceiling from the same constant the parse uses.'
         );
     }
 

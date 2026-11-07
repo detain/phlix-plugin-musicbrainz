@@ -299,4 +299,94 @@ final class MusicBrainzApiImageRedirectWalkTest extends TestCase
         ));
         $this->assertNotEmpty($refused, 'A size-aborted image fetch must leave a refusal log line.');
     }
+
+    /**
+     * PSR-3 sink capturing every record verbatim (level, message, context).
+     */
+    private function recordingLogger(): LoggerInterface
+    {
+        return new class () implements LoggerInterface {
+            /** @var list<array{level: string, message: string, context: array<string, mixed>}> */
+            public array $records = [];
+
+            public function emergency($message, array $context = []): void
+            {
+                $this->log('emergency', $message, $context);
+            }
+
+            public function alert($message, array $context = []): void
+            {
+                $this->log('alert', $message, $context);
+            }
+
+            public function critical($message, array $context = []): void
+            {
+                $this->log('critical', $message, $context);
+            }
+
+            public function error($message, array $context = []): void
+            {
+                $this->log('error', $message, $context);
+            }
+
+            public function warning($message, array $context = []): void
+            {
+                $this->log('warning', $message, $context);
+            }
+
+            public function notice($message, array $context = []): void
+            {
+                $this->log('notice', $message, $context);
+            }
+
+            public function info($message, array $context = []): void
+            {
+                $this->log('info', $message, $context);
+            }
+
+            public function debug($message, array $context = []): void
+            {
+                $this->log('debug', $message, $context);
+            }
+
+            public function log($level, $message, array $context = []): void
+            {
+                $this->records[] = ['level' => (string)$level, 'message' => (string)$message, 'context' => $context];
+            }
+        };
+    }
+
+    /**
+     * M-MUSICBRAINZ-40: a refused hop's Location is remote data. The
+     * refusal line capped it to 256 bytes but echoed control characters
+     * RAW — a CR/LF inside a server answer could forge an adjacent line in
+     * a flat log sink. Every untrusted log value now passes the shared
+     * scrub+cap parse.
+     */
+    public function testRefusedRedirectLocationIsScrubbedInLogContext(): void
+    {
+        $logger = $this->recordingLogger();
+        $harness = $this->harness([
+            self::IMAGE => $this->redirect("https://evil.example/\x1b[31m\r\nFORGED-LINE"),
+        ], $logger);
+
+        $this->assertNull($harness->api->getFrontCover(self::MBID));
+
+        $refused = array_values(array_filter(
+            $logger->records,
+            static fn (array $r): bool => str_contains($r['message'], 'refused image redirect')
+        ));
+        $this->assertNotEmpty($refused, 'The off-allowlist hop still leaves its refusal line.');
+
+        $this->assertGreaterThan(0, count($refused[0]['context']));
+        foreach ($refused[0]['context'] as $key => $value) {
+            $this->assertIsString($value, "Refusal context['{$key}'] stays a plain string.");
+            $this->assertSame(
+                0,
+                preg_match('/[\x00-\x1F\x7F]/', (string)$value),
+                "No control byte may survive into log context['{$key}']."
+            );
+            $this->assertLessThanOrEqual(256, mb_strlen((string)$value));
+        }
+    }
 }

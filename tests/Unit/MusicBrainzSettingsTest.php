@@ -77,6 +77,28 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame(2500, MusicBrainzSettings::fromArray(['rate_limit_delay' => 2500])->rateLimitDelay);
     }
 
+    /**
+     * M-MUSICBRAINZ-39: the floor had no ceiling — a mistyped 110000
+     * (ms-vs-seconds confusion) spaces every queue item by two minutes and
+     * a 999999999 value parks the pipeline for days, all silently. The
+     * value feeds API pacing, queue dispatch spacing and the drain-timer
+     * interval at once, so one ceiling at the parse boundary bounds all
+     * three: 60000 ms, mirroring the API layer's own MAX_BACKOFF_MS idiom.
+     */
+    public function testFromArrayClampsRateLimitDelayToTheCeiling(): void
+    {
+        $this->assertSame(60000, MusicBrainzSettings::MAX_RATE_LIMIT_DELAY_MS);
+
+        $this->assertSame(60000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 60001])->rateLimitDelay);
+        $this->assertSame(60000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 110000])->rateLimitDelay);
+        $this->assertSame(60000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 999999999])->rateLimitDelay);
+        $this->assertSame(60000, MusicBrainzSettings::fromArray(['rate_limit_delay' => 60000])->rateLimitDelay);
+
+        // The in-window range stays verbatim; only the extremes clamp.
+        $this->assertSame(59999, MusicBrainzSettings::fromArray(['rate_limit_delay' => 59999])->rateLimitDelay);
+        $this->assertSame(2500, MusicBrainzSettings::fromArray(['rate_limit_delay' => 2500])->rateLimitDelay);
+    }
+
     public function testFromArrayWithInvalidSearchDepth(): void
     {
         $data = [

@@ -100,11 +100,24 @@ final class HttpClient implements HttpClientInterface
      * endpoint can still make the library buffer one response before the
      * refusal fires (the blocking fallback aborts mid-transfer).
      *
+     * Host fence (M-MUSICBRAINZ-41): the library dials whatever URL it is
+     * handed, so the boundary law the blocking path gets from curl options
+     * (PROTOCOLS/REDIR_PROTOCOLS, https-only) lives here as an explicit
+     * check — https scheme, no userinfo, and only the two service hosts
+     * this plugin speaks to (exact or true subdomain). A refused target
+     * returns the transport-failure shape WITHOUT dialing; the API layer's
+     * loud transport warning (M-MUSICBRAINZ-38) makes refusals visible
+     * rather than silently indistinguishable from a miss.
+     *
      * @param array<string, string> $headers
      * @param array<string, mixed> $options
      */
     private function getAsync(string $url, array $headers, array $options): HttpResponse
     {
+        if (!self::isAllowedAsyncTarget($url)) {
+            return HttpResponse::failure();
+        }
+
         $followRedirects = self::followsRedirects($options);
         $maxResponseBytes = self::responseBudget($options);
 
@@ -227,6 +240,49 @@ final class HttpClient implements HttpClientInterface
         $budget = $options['maxResponseBytes'] ?? 0;
 
         return is_int($budget) && $budget > 0 ? $budget : 0;
+    }
+
+    /**
+     * The async transport's trust set (M-MUSICBRAINZ-41): the two services
+     * this plugin speaks to. Subdomains are inside the trust (Cover Art
+     * Archive serves images from cover subdomains — the redirect-walk suite
+     * pins such a hop as legit); lookalike suffixes are not.
+     *
+     * @var list<string>
+     */
+    private const ALLOWED_ASYNC_HOSTS = ['musicbrainz.org', 'coverartarchive.org'];
+
+    /**
+     * Parse an async dial target into "may we touch the network for this"
+     * (M-MUSICBRAINZ-41): https only, no userinfo in any position, host
+     * exactly on the trust set or a true subdomain of it. An unparseable
+     * URL is illegal, not merely unknown — refuse. Mirrors the curl
+     * PROTOCOLS/REDIR_PROTOCOLS law the blocking fallback gets from libcurl
+     * options, which the async library has no equivalent of.
+     */
+    private static function isAllowedAsyncTarget(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https') {
+            return false;
+        }
+
+        if (isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+
+        $host = strtolower($parts['host'] ?? '');
+        if ($host === '') {
+            return false;
+        }
+
+        foreach (self::ALLOWED_ASYNC_HOSTS as $allowed) {
+            if ($host === $allowed || str_ends_with($host, '.' . $allowed)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

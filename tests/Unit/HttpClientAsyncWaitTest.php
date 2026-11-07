@@ -238,4 +238,75 @@ final class HttpClientAsyncWaitTest extends TestCase
         $this->assertSame(200, $second->status);
         $this->assertSame('clean-slate', $second->body);
     }
+
+    /**
+     * M-MUSICBRAINZ-41: the async (production) transport used to hand the
+     * URL straight to the host library with no check of its own — the
+     * protocol lockdown existed only as curl options on the CLI/test
+     * blocking fallback. The boundary law now mirrors that fence, tightened
+     * to the plugin's actual trust set: https only, the two service hosts
+     * (exact or true subdomain) only, no userinfo — and a refused target is
+     * never dialed at all. These cases script a transport that WOULD answer,
+     * so an un-fenced leg shows up as a recorded dial, not a silent miss.
+     */
+    public function testAsyncFenceRefusesNonHttpsTargetsWithoutDialing(): void
+    {
+        $targets = [
+            'cleartext to a service host' => 'http://musicbrainz.org/ws/2/artist/x',
+            'cleartext with port' => 'http://coverartarchive.org:8080/release/x',
+            'file scheme' => 'file:///etc/passwd',
+            'gopher scheme' => 'gopher://musicbrainz.org:70/',
+        ];
+
+        foreach ($targets as $label => $url) {
+            $client = $this->scriptClient('respond', $this->makeResponse());
+            $result = $this->getAsync($client, $url, []);
+
+            $this->assertSame([], $client->dials, "Refused target must never reach the transport: {$label}.");
+            $this->assertNull($result->status, "A fence refusal reads as a transport failure: {$label}.");
+            $this->assertNull($result->body);
+        }
+    }
+
+    public function testAsyncFenceRefusesOffAllowlistHostsWithoutDialing(): void
+    {
+        $targets = [
+            'foreign host' => 'https://evil.example/ws/2/artist',
+            'link-local metadata' => 'https://169.254.169.254/latest/meta-data/',
+            'loopback' => 'https://127.0.0.1:9/anything',
+            'suffix lookalike' => 'https://musicbrainz.org.evil.example/',
+            'userinfo smuggle' => 'https://ops@coverartarchive.org/release/x',
+            'userinfo on foreign host' => 'https://musicbrainz.org@evil.example/',
+            'empty host' => 'https:///no-host',
+        ];
+
+        foreach ($targets as $label => $url) {
+            $client = $this->scriptClient('respond', $this->makeResponse());
+            $result = $this->getAsync($client, $url, []);
+
+            $this->assertSame([], $client->dials, "Refused target must never reach the transport: {$label}.");
+            $this->assertNull($result->status);
+        }
+    }
+
+    public function testAsyncFenceAllowsTheServiceApexesAndSubdomains(): void
+    {
+        // The positive control: the fence must not break what production
+        // actually dials — both service apexes and CAA's cover subdomain
+        // (the redirect-walk suite pins that hop as legit).
+        $targets = [
+            'https://musicbrainz.org/ws/2/artist/ok',
+            'https://test.musicbrainz.org/ws/2/artist/ok',
+            'https://coverartarchive.org/release/ok',
+            'https://covers.coverartarchive.org/release/ok/image.bin',
+        ];
+
+        foreach ($targets as $url) {
+            $client = $this->scriptClient('respond', $this->makeResponse(200, 'fine'));
+            $result = $this->getAsync($client, $url, []);
+
+            $this->assertCount(1, $client->dials, "Legit service target must still dial: {$url}.");
+            $this->assertSame(200, $result->status);
+        }
+    }
 }

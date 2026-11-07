@@ -30,11 +30,13 @@ use Psr\Log\NullLogger;
  * server runs several worker processes; if more than one actively enriches at
  * once, the aggregate IP rate multiplies accordingly. The shipped posture is
  * single-enrichment-worker: enrichment is driven by the queue drain, not by
- * every worker. The settings layer additionally floors the API pacing delay
- * at MusicBrainzSettings::MIN_RATE_LIMIT_DELAY_MS (1000 ms) so a
+ * every worker. The settings layer additionally bounds the API pacing delay
+ * between MusicBrainzSettings::MIN_RATE_LIMIT_DELAY_MS (1000 ms — a
  * misconfigured `rate_limit_delay` cannot burst through the client's own
- * layer; cross-process token-bucket coordination is not implemented and is
- * the honest residual if this plugin ever runs multi-worker drains.
+ * layer) and MAX_RATE_LIMIT_DELAY_MS (60000 ms, M-MUSICBRAINZ-39 — the same
+ * typo cannot park the pipeline forever). Cross-process token-bucket
+ * coordination is not implemented and is the honest residual if this plugin
+ * ever runs multi-worker drains.
  *
  * @package Phlix\Plugin\MusicBrainz
  */
@@ -71,6 +73,15 @@ final class MusicBrainzApi
 
     /** @var int Never park a caller longer than this on a rate-limit signal */
     private const MAX_BACKOFF_MS = 60000;
+
+    /**
+     * Shared cap (M-MUSICBRAINZ-40, codepoints) for every untrusted value
+     * placed in log context — refused MBIDs, dialed image URLs, remote
+     * Locations. One bound instead of hand-tuned per-site substrs that
+     * drift; the refusal echo stays diagnostic while never bloating the
+     * sink or smuggling an unbounded hostile string.
+     */
+    private const LOG_VALUE_MAX_CHARS = 256;
 
     /** @var int Conditional-GET (ETag) memo capacity, FIFO-evicted */
     private const ETAG_CACHE_SIZE = 256;
@@ -323,7 +334,24 @@ final class MusicBrainzApi
             // Apply per-instance rate limiting + process-wide backoff window
             $this->applyRateLimiting();
 
-            return $this->httpClient->get($url, $headers, $query, $options);
+            $response = $this->httpClient->get($url, $headers, $query, $options);
+
+            // M-MUSICBRAINZ-38: a null status IS the shipped transports'
+            // shape for "the exchange never completed" (DNS/connect/timeout
+            // — neither throws), and the collapse law keeps the return
+            // value silent, so this is the one place the outage can become
+            // visible. One warning per failed exchange; the context carries
+            // the path only — never headers or bodies. A fence refusal from
+            // the transport layer (M-MUSICBRAINZ-41) surfaces here too,
+            // which is exactly the point: refused targets stop being
+            // indistinguishable from genuine misses.
+            if ($response->status === null) {
+                $this->logger->warning('MusicBrainz: transport failure (request did not complete)', [
+                    'target' => self::logSafe($url),
+                ]);
+            }
+
+            return $response;
         } finally {
             // SV-4.5: Release slot back to limiter after request completes
             $this->releaseLimiterSlot();
@@ -756,7 +784,7 @@ final class MusicBrainzApi
         while (true) {
             if (!self::isSafeCoverArtUrl($current)) {
                 $this->logger->warning('MusicBrainz: refused image URL outside coverartarchive.org', [
-                    'url' => substr($current, 0, 256),
+                    'url' => self::logSafe($current),
                 ]);
 
                 return null;
@@ -770,7 +798,7 @@ final class MusicBrainzApi
                 $this->observeRateSignals($response);
             } catch (\Throwable $e) {
                 $this->logger->warning('MusicBrainz: failed to fetch image', [
-                    'url' => $current,
+                    'url' => self::logSafe($current),
                     'error' => $e->getMessage(),
                 ]);
 
@@ -779,7 +807,7 @@ final class MusicBrainzApi
 
             if ($response->isTooLarge()) {
                 $this->logger->warning('MusicBrainz: refused oversized cover image response', [
-                    'url' => substr($current, 0, 256),
+                    'url' => self::logSafe($current),
                     'cap' => self::MAX_IMAGE_RESPONSE_BYTES,
                 ]);
 
@@ -832,7 +860,7 @@ final class MusicBrainzApi
     {
         if ($hops >= self::MAX_IMAGE_REDIRECT_HOPS) {
             $this->logger->warning('MusicBrainz: refused cover image redirect chain beyond hop limit', [
-                'url' => substr($current, 0, 256),
+                'url' => self::logSafe($current),
                 'limit' => self::MAX_IMAGE_REDIRECT_HOPS,
             ]);
 
@@ -844,8 +872,8 @@ final class MusicBrainzApi
 
         if ($target === null || !self::isSafeCoverArtUrl($target)) {
             $this->logger->warning('MusicBrainz: refused image redirect outside coverartarchive.org', [
-                'from' => substr($current, 0, 256),
-                'to' => substr($location, 0, 256),
+                'from' => self::logSafe($current),
+                'to' => self::logSafe($location),
             ]);
 
             return null;
@@ -904,6 +932,38 @@ final class MusicBrainzApi
         $host = strtolower((string)($parts['host'] ?? ''));
 
         return $host === 'coverartarchive.org' || str_ends_with($host, '.coverartarchive.org');
+    }
+
+    /**
+     * Parse an untrusted string for log context (M-MUSICBRAINZ-40): strip
+     * Unicode control/format characters (C0/C1, DEL, zero-width and bidi
+     * marks — the payload shapes that forge adjacent lines or spoof a sink
+     * render), trim, then cap at $cap codepoints. Refused MBIDs, dialed
+     * image URLs and remote Locations are attacker-influenced at the
+     * boundary — the same inputs the gate and the host fence exist to
+     * police — so the log may quote them only in this sanitized shape.
+     * Same discipline MetadataEnricher::strValue() applies to persisted
+     * values; unlike that parser this one always returns a string (an empty
+     * render is a legitimate log fact, not a missing one). The cap is a
+     * codepoint bound, so multi-byte payloads can no longer smuggle past a
+     * byte-wise substr.
+     */
+    private static function logSafe(string $value, int $cap = self::LOG_VALUE_MAX_CHARS): string
+    {
+        $scrubbed = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value);
+        if ($scrubbed === null) {
+            // Invalid UTF-8 — preg refuses the /u pass. The byte-level C0/C1
+            // scrub is the honest fallback; it may leave a mangled shape but
+            // never a control byte, which is the property the log needs.
+            $scrubbed = preg_replace('/[\x00-\x1F\x7F]/', '', $value) ?? '';
+        }
+
+        $trimmed = trim($scrubbed);
+        if (preg_match('/^.{0,' . $cap . '}/u', $trimmed, $cut) === 1) {
+            return $cut[0];
+        }
+
+        return substr($trimmed, 0, $cap);
     }
 
     /**
@@ -980,7 +1040,10 @@ final class MusicBrainzApi
 
         $this->logger->warning('MusicBrainz: refused malformed MBID (transport not dialed)', [
             'kind' => $kind,
-            'mbid' => substr($mbid, 0, 96),
+            // M-MUSICBRAINZ-40: scrubbed, and kept at this site's own 96-
+            // codepoint bound (a valid MBID is 36; the refusal echo is
+            // diagnostic context, not a place to replay hostile payloads).
+            'mbid' => self::logSafe($mbid, 96),
         ]);
 
         return false;
