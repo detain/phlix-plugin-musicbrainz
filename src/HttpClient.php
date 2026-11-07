@@ -42,42 +42,69 @@ final class HttpClient implements HttpClientInterface
     /**
      * {@inheritdoc}
      */
-    public function get(string $url, array $headers = [], array $query = []): HttpResponse
+    public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
     {
         if (count($query) > 0) {
             $url .= '?' . http_build_query($query);
         }
 
         if (class_exists(\Workerman\Http\Client::class)) {
-            return $this->getAsync($url, $headers);
+            return $this->getAsync($url, $headers, $options);
         }
 
-        return $this->getBlocking($url, $headers);
+        return $this->getBlocking($url, $headers, $options);
     }
 
     /**
      * Non-blocking GET via workerman/http-client with a cooperative wait.
      *
+     * Redirect fence: the library follows redirects per-request through its
+     * `allow_redirects` option (default max 3); `max => 0` makes it hand the
+     * 3xx itself to the success callback, which is exactly the fence the
+     * cover-art walk requires. The library has no body-size option, so an
+     * async `maxResponseBytes` budget is enforced from the Content-Length
+     * hint first and from the converted body length second — a hostile
+     * endpoint can still make the library buffer one response before the
+     * refusal fires (the blocking fallback aborts mid-transfer).
+     *
      * @param array<string, string> $headers
+     * @param array<string, mixed> $options
      */
-    private function getAsync(string $url, array $headers): HttpResponse
+    private function getAsync(string $url, array $headers, array $options): HttpResponse
     {
+        $followRedirects = self::followsRedirects($options);
+        $maxResponseBytes = self::responseBudget($options);
+
         /** @var array{done: bool, response: HttpResponse} $state */
         $state = ['done' => false, 'response' => HttpResponse::failure()];
 
-        $client = new \Workerman\Http\Client(['timeout' => $this->timeout]);
-        $client->request($url, [
+        $request = [
             'method' => 'GET',
             'headers' => $headers,
-            'success' => static function ($response) use (&$state): void {
+        ];
+        if ($followRedirects === false) {
+            $request['allow_redirects'] = ['max' => 0];
+        }
+
+        $client = new \Workerman\Http\Client(['timeout' => $this->timeout]);
+        $client->request($url, $request + [
+            'success' => static function ($response) use (&$state, $maxResponseBytes): void {
                 $status = (int)$response->getStatusCode();
                 $body = ($status >= 200 && $status < 400) ? (string)$response->getBody() : null;
                 $headers = [];
-                foreach (['etag', 'retry-after'] as $name) {
+                foreach (['etag', 'retry-after', 'location', 'content-length'] as $name) {
                     $value = (string)$response->getHeaderLine($name);
                     if ($value !== '') {
                         $headers[$name] = $value;
                     }
+                }
+
+                $declared = $headers['content-length'] ?? null;
+                if ($maxResponseBytes > 0 && self::overBudget($declared, $body, $maxResponseBytes)) {
+                    $state['response'] = HttpResponse::contentTooLarge();
+                    $state['done'] = true;
+
+                    return;
                 }
 
                 $state['response'] = new HttpResponse($status, $body, $headers);
@@ -102,14 +129,52 @@ final class HttpClient implements HttpClientInterface
     }
 
     /**
+     * Size-budget reading for the async leg: a numeric Content-Length past
+     * the budget refuses before the body is even converted, and the converted
+     * length is the belt when the hint is absent or lying.
+     */
+    private static function overBudget(?string $declared, ?string $body, int $budget): bool
+    {
+        if ($declared !== null && ctype_digit($declared) && (int)$declared > $budget) {
+            return true;
+        }
+
+        return $body !== null && strlen($body) > $budget;
+    }
+
+    /**
+     * Fence-option readers (the option bag is mixed by contract): only an
+     * explicit false disables auto-follow, and only a positive int sets a
+     * byte budget — anything else reads as the default posture. Parsed, not
+     * cast.
+     *
+     * @param array<string, mixed> $options
+     */
+    private static function followsRedirects(array $options): bool
+    {
+        return ($options['followRedirects'] ?? true) !== false;
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    private static function responseBudget(array $options): int
+    {
+        $budget = $options['maxResponseBytes'] ?? 0;
+
+        return is_int($budget) && $budget > 0 ? $budget : 0;
+    }
+
+    /**
      * Blocking cURL GET — CLI / test fallback only (no event loop present).
      *
-     * Carries the HTTP status and the rate-limiting/conditional-GET headers
+     * Carries the HTTP status and the rate-limiting/conditional-headers
      * upstream; bodies are returned only for 2xx-3xx exchanges.
      *
      * @param array<string, string> $headers
+     * @param array<string, mixed> $options
      */
-    private function getBlocking(string $url, array $headers): HttpResponse
+    private function getBlocking(string $url, array $headers, array $options): HttpResponse
     {
         // Fail-loud guard at the transport boundary: an empty URL is never a
         // legal request, and the early exit also pins the non-empty-string
@@ -139,15 +204,25 @@ final class HttpClient implements HttpClientInterface
             $userAgent = MusicBrainzSettings::DEFAULT_USER_AGENT;
         }
         unset($headers['User-Agent']);
-        curl_setopt_array($ch, [
+
+        $followRedirects = self::followsRedirects($options);
+        $maxResponseBytes = self::responseBudget($options);
+
+        $body = '';
+        $tooLarge = false;
+        $curlOptions = [
             CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_RETURNTRANSFER => $maxResponseBytes === 0,
             CURLOPT_TIMEOUT => $this->timeout,
             // Never let a URL (or a redirect chain) cross into file://,
-            // gopher:// or any other curl transport beyond HTTP(S).
+            // gopher:// or any other curl transport beyond HTTP(S), and pin
+            // REDIRECT targets to HTTPS outright: a network-supplied
+            // Location may not downgrade a secured exchange to plain http
+            // (the cover-art walk re-gates hops itself; every other caller
+            // rides this floor too).
             CURLOPT_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
-            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
-            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_FOLLOWLOCATION => $followRedirects,
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
             CURLOPT_USERAGENT => $userAgent,
@@ -160,11 +235,45 @@ final class HttpClient implements HttpClientInterface
 
                 return strlen($header);
             },
-        ]);
+        ];
+
+        if ($maxResponseBytes > 0) {
+            // Pre-buffer cap: chunks accumulate only up to the budget, and
+            // the chunk that would cross it aborts the transfer outright
+            // (returning a short count is curl's WRITEFUNCTION abort).
+            $curlOptions[CURLOPT_WRITEFUNCTION] = static function (
+                $handle,
+                string $chunk
+            ) use (
+                &$body,
+                &$tooLarge,
+                $maxResponseBytes
+            ): int {
+                if (strlen($body) + strlen($chunk) > $maxResponseBytes) {
+                    $tooLarge = true;
+
+                    return 0;
+                }
+
+                $body .= $chunk;
+
+                return strlen($chunk);
+            };
+        }
+
+        curl_setopt_array($ch, $curlOptions);
 
         $response = curl_exec($ch);
         $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($tooLarge) {
+            return HttpResponse::contentTooLarge();
+        }
+
+        if ($maxResponseBytes > 0) {
+            $response = $body;
+        }
 
         if (!is_string($response) || $httpCode >= 400) {
             return new HttpResponse($httpCode > 0 ? $httpCode : null, null, $responseHeaders);

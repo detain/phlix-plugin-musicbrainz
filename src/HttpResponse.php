@@ -55,6 +55,22 @@ final class HttpResponse
         return new self(null, null);
     }
 
+    /**
+     * The transport aborted the exchange because the response body exceeded
+     * the caller's declared `maxResponseBytes` budget. No body is delivered;
+     * `isTooLarge()` reads this back. (A genuine upstream 413, if one ever
+     * arrives, shares the reading — both shapes mean "refused for size".)
+     */
+    public static function contentTooLarge(): self
+    {
+        return new self(413, null);
+    }
+
+    public function isTooLarge(): bool
+    {
+        return $this->status === 413;
+    }
+
     public function ok(): bool
     {
         return $this->status !== null && $this->status >= 200 && $this->status < 300;

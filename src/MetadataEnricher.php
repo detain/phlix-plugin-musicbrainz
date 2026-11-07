@@ -53,7 +53,7 @@ final class MetadataEnricher
      * @param string $title Track or album title
      * @param string|null $artist Artist name (optional for fast search)
      * @param string|null $album Album name (optional)
-     * @param int $duration Duration in seconds (optional)
+     * @param int|null $duration Duration in seconds (optional; null when unknown)
      * @param string|null $isrc ISRC code (optional)
      *
      * @return MetadataEnrichmentResult
@@ -429,7 +429,7 @@ final class MetadataEnricher
             'barcode' => self::strField($release, 'barcode', 64),
             'label' => self::strField($labelEntity, 'name') ?? self::strField($labelInfo, 'name'),
             'catalog_number' => self::strField($labelInfo, 'catalog-number', 64),
-            'media_format' => self::strField($release, 'media-format'),
+            'media_format' => self::mediaFormat($release),
             'asin' => self::strField($release, 'asin', 32),
             'artist_mbid' => self::strField($creditArtist, 'id', 64),
             'artist_name' => self::strField($credit, 'name'),
@@ -437,6 +437,38 @@ final class MetadataEnricher
             'artist_credits' => $credits,
             'artist_credit_display' => self::artistCreditDisplay($credits),
         ];
+    }
+
+    /**
+     * First non-empty medium format from the release payload.
+     *
+     * The live ws/2 release shape carries media as a `media` array of medium
+     * rows, each with its own `format` string ("CD", "Vinyl", "Digital
+     * Media", …); the flat `media-format` key the old reader used is never
+     * emitted by the live API, so the field was dead — always null — on
+     * every real enrichment. The nested read is primary; the flat key stays
+     * as a legacy-shape fallback, same posture as the label-info
+     * nested/flat reads. Non-array rows and empty/absent formats are skipped.
+     *
+     * @param array<array-key, mixed> $release
+     */
+    private static function mediaFormat(array $release): ?string
+    {
+        $media = $release['media'] ?? null;
+        if (is_array($media)) {
+            foreach ($media as $medium) {
+                if (!is_array($medium)) {
+                    continue;
+                }
+
+                $format = self::strField($medium, 'format', 64);
+                if ($format !== null) {
+                    return $format;
+                }
+            }
+        }
+
+        return self::strField($release, 'media-format');
     }
 
     /**

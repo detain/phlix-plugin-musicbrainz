@@ -41,7 +41,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->urls[] = $url;
                 foreach ($this->responses as $pattern => $body) {

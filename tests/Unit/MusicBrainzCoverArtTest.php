@@ -57,7 +57,7 @@ final class MusicBrainzCoverArtTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->dialed[] = $url;
                 if ($url === MusicBrainzCoverArtTest::HOST) {

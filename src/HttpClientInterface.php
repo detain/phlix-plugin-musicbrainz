@@ -31,8 +31,22 @@ interface HttpClientInterface
      * @param string $url Full URL to request
      * @param array<string, string> $headers Request headers
      * @param array<string, mixed> $query Query parameters (appended to URL)
+     * @param array<string, mixed> $options Transport options (all optional):
+     *        - `followRedirects` (bool, default true): when false, a 3xx must
+     *          be surfaced as the completed exchange — status and Location
+     *          header delivered to the caller, never silently fetched by the
+     *          transport. Callers that re-gate redirect targets depend on
+     *          this fence.
+     *        - `maxResponseBytes` (int, absent/0 = unbounded): once the body
+     *          would exceed this budget the exchange aborts and the response
+     *          reports {@see HttpResponse::isTooLarge()} with no body.
      *
      * @return HttpResponse Status, body and response headers
      */
-    public function get(string $url, array $headers = [], array $query = []): HttpResponse;
+    public function get(
+        string $url,
+        array $headers = [],
+        array $query = [],
+        array $options = []
+    ): HttpResponse;
 }

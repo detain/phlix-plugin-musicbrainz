@@ -219,6 +219,50 @@ final class HttpClientTest extends TestCase
         $this->assertNull($result->body);
     }
 
+    public function testTransportSurfacesRedirectWhenAutoFollowIsDisabled(): void
+    {
+        // The cover-art walk asks for this fence: a 3xx must come back as a
+        // completed exchange carrying its Location, never be silently
+        // followed inside the transport.
+        $client = new HttpClient(10);
+        $result = $client->get(self::endpoint('/redirect'), [], [], ['followRedirects' => false]);
+
+        $this->assertSame(302, $result->status);
+        $this->assertFalse($result->ok());
+        $this->assertSame('/final', $result->headers['location'] ?? null);
+    }
+
+    public function testDefaultAutoFollowRefusesPlainHttpRedirectTarget(): void
+    {
+        // CURLINFO-free proof that redirected-to protocols are pinned to
+        // HTTPS: on this http fixture the follow attempt must ABORT at the
+        // redirect hop (the 302 code survives as the last received one and
+        // the /final body is never delivered).
+        $client = new HttpClient(10);
+        $result = $client->get(self::endpoint('/redirect'));
+
+        $this->assertSame(302, $result->status);
+        $this->assertNotSame('final-body', $result->body);
+    }
+
+    public function testMaxResponseBytesAbortsBeforeBufferingTheBody(): void
+    {
+        $client = new HttpClient(10);
+        $result = $client->get(self::endpoint('/bytes/262144'), [], [], ['maxResponseBytes' => 4096]);
+
+        $this->assertTrue($result->isTooLarge(), 'A declared body past the byte budget must abort pre-buffer.');
+        $this->assertNull($result->body);
+    }
+
+    public function testBodyWithinByteBudgetIsDeliveredIntact(): void
+    {
+        $client = new HttpClient(10);
+        $result = $client->get(self::endpoint('/bytes/2048'), [], [], ['maxResponseBytes' => 4096]);
+
+        $this->assertSame(200, $result->status);
+        $this->assertSame(2048, strlen((string)$result->body));
+    }
+
     public function testGetReturnsNullOnTimeout(): void
     {
         // Declared last: the single-threaded built-in server spends the

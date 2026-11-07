@@ -47,7 +47,7 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->test->calls[] = ['url' => $url, 'headers' => $headers, 'query' => $query];
 
@@ -102,7 +102,7 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $n = count($this->test->calls) + 1;
                 $this->test->calls[] = ['url' => $url, 'headers' => $headers];
@@ -134,7 +134,7 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $n = count($this->test->calls) + 1;
                 $this->test->calls[] = ['url' => $url, 'headers' => $headers];

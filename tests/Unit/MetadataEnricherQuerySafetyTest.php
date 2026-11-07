@@ -43,7 +43,7 @@ final class MetadataEnricherQuerySafetyTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 if (isset($query['query'])) {
                     $this->queries[] = (string)$query['query'];

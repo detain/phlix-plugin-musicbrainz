@@ -29,7 +29,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testSearchArtistsReturnsEmptyArrayOnFailure(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::failure();
             }
@@ -44,7 +44,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testSearchArtistsParsesResponse(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 if (str_contains($url, '/artist')) {
                     return HttpResponse::fromBody(is_string(json_encode([
@@ -72,7 +72,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testSearchReleasesReturnsEmptyArrayOnFailure(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::failure();
             }
@@ -87,7 +87,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testSearchRecordingsReturnsEmptyArrayOnFailure(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::failure();
             }
@@ -102,7 +102,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testGetArtistReturnsNullOnFailure(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::failure();
             }
@@ -117,7 +117,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testGetArtistReturnsDataOnSuccess(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 if (str_contains($url, '/artist/54736453-1283-7eb6-02ab-1bae8501ee4c')) {
                     return HttpResponse::fromBody(is_string(json_encode([
@@ -145,7 +145,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testGetCoverArtReturnsNullOnFailure(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::failure();
             }
@@ -160,7 +160,7 @@ final class MusicBrainzApiTest extends TestCase
     public function testGetCoverArtParsesImages(): void
     {
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 if (str_contains($url, 'coverartarchive.org')) {
                     return HttpResponse::fromBody(is_string(json_encode([
@@ -199,7 +199,7 @@ final class MusicBrainzApiTest extends TestCase
         $captured = new class implements HttpClientInterface {
             public ?string $inc = null;
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
                 return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
@@ -217,7 +217,7 @@ final class MusicBrainzApiTest extends TestCase
         $captured = new class implements HttpClientInterface {
             public ?string $inc = null;
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
                 return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
@@ -235,7 +235,7 @@ final class MusicBrainzApiTest extends TestCase
         $captured = new class implements HttpClientInterface {
             public ?string $inc = null;
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->inc = isset($query['inc']) ? (string) $query['inc'] : null;
                 return HttpResponse::fromBody(is_string(json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c'])) ? (string)json_encode(['id' => '54736453-1283-7eb6-02ab-1bae8501ee4c']) : null);
@@ -253,7 +253,7 @@ final class MusicBrainzApiTest extends TestCase
         $callTimes = [];
 
         $httpClient = new class implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::fromBody(is_string(json_encode(['artists' => []])) ? (string)json_encode(['artists' => []]) : null);
             }

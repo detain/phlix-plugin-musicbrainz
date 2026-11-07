@@ -12,6 +12,9 @@
  *   /status/NNN   -> HTTP status NNN with a body the client must discard
  *   /delay/S      -> sleep S seconds, then 200 'slow' (client-timeout leg)
  *   /etag         -> ETag '"v1"'; If-None-Match: '"v1"' -> 304, no body
+ *   /redirect     -> 302 with Location: /final (fence/REDIR_PROTOCOLS legs)
+ *   /final        -> 200 'final-body' (the redirect target)
+ *   /bytes/N      -> 200 with an exactly N-byte body (byte-budget leg)
  *
  * This file is test scaffolding only — production code must never route here.
  *
@@ -70,6 +73,22 @@ if ($path === '/etag') {
     }
 
     echo 'etag-body';
+    return;
+}
+
+if ($path === '/redirect') {
+    header('Location: /final');
+    http_response_code(302);
+    return;
+}
+
+if ($path === '/final') {
+    echo 'final-body';
+    return;
+}
+
+if (preg_match('#^/bytes/(\d+)$#', $path, $matches) === 1) {
+    echo str_repeat('x', min((int)$matches[1], 10 * 1024 * 1024));
     return;
 }
 

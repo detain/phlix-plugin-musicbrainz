@@ -44,7 +44,7 @@ final class MusicBrainzMbidGateTest extends TestCase
     private function refusingApi(): MusicBrainzApi
     {
         $client = new class () implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 throw new RuntimeException('transport must not be dialed for a malformed MBID: ' . $url);
             }
@@ -97,7 +97,7 @@ final class MusicBrainzMbidGateTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 $this->dialed[] = $url;
 
@@ -116,7 +116,7 @@ final class MusicBrainzMbidGateTest extends TestCase
     public function testUppercaseHexMbidIsAccepted(): void
     {
         $client = new class () implements HttpClientInterface {
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 return HttpResponse::fromBody(json_encode(['id' => 'x', 'title' => 'Heroes']) ?: '');
             }

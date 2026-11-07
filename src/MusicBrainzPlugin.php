@@ -138,6 +138,16 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         if ($this->logger instanceof NullLogger) {
             $logger = $container->get(LoggerInterface::class);
             $this->logger = $logger instanceof LoggerInterface ? $logger : new NullLogger();
+            // The API client bakes its logger at construction, so adopting a
+            // REAL logger without rebuilding it would leave every api-layer
+            // warning (refused image URLs, rate backoff, malformed payloads)
+            // flowing to the discarded NullLogger. The rebuild is gated on
+            // having actually adopted one: while the sink stays a NullLogger
+            // there is nothing to rebind, and the fresh enricher below keeps
+            // its old (possibly host-injected) api.
+            if (!$this->logger instanceof NullLogger) {
+                $this->api = $this->buildApi();
+            }
             $this->enricher = new MetadataEnricher($this->api, $this->settings, $this->logger);
         }
 

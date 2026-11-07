@@ -47,7 +47,7 @@ final class MetadataEnricherArtistAliasLabelTest extends TestCase
             {
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 foreach ($this->responses as $pattern => $body) {
                     if (str_contains($url, $pattern)) {

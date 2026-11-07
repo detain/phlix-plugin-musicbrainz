@@ -38,7 +38,7 @@ final class MetadataEnricherUncoveredTest extends TestCase
                 $this->responses = $responses;
             }
 
-            public function get(string $url, array $headers = [], array $query = []): HttpResponse
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
             {
                 foreach ($this->responses as $pattern => $response) {
                     if (str_contains($url, $pattern)) {

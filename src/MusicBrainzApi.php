@@ -47,6 +47,14 @@ final class MusicBrainzApi
     private const MAX_IMAGE_RESPONSE_BYTES = 10 * 1024 * 1024;
 
     /**
+     * Maximum Location hops fetchImage() will walk for one cover image.
+     * Matches the transport's previous auto-follow budget (3) so legit CAA
+     * redirect chains keep working while a cycling/unbounded chain is
+     * refused at a bound — every hop inside the walk is allowlist-gated.
+     */
+    private const MAX_IMAGE_REDIRECT_HOPS = 3;
+
+    /**
      * Canonical MusicBrainz entity ID shape (M-MUSICBRAINZ-11): an MBID is
      * always a UUID, so anything else must NEVER be interpolated into a
      * request path — slashes, query marks or fragments in a "supposed" id
@@ -267,13 +275,18 @@ final class MusicBrainzApi
      * @param string $url Full URL to request
      * @param array<string, string> $headers Request headers
      * @param array<string, mixed> $query Query parameters
+     * @param array<string, mixed> $options Transport options (see HttpClientInterface::get)
      *
      * @return HttpResponse The completed (or failed) exchange
      *
      * @since SV-4.5
      */
-    private function requestWithLimiting(string $url, array $headers = [], array $query = []): HttpResponse
-    {
+    private function requestWithLimiting(
+        string $url,
+        array $headers = [],
+        array $query = [],
+        array $options = []
+    ): HttpResponse {
         // SV-4.5: Acquire slot from static per-host limiter before making request
         $this->acquireLimiterSlot();
 
@@ -281,7 +294,7 @@ final class MusicBrainzApi
             // Apply per-instance rate limiting + process-wide backoff window
             $this->applyRateLimiting();
 
-            return $this->httpClient->get($url, $headers, $query);
+            return $this->httpClient->get($url, $headers, $query, $options);
         } finally {
             // SV-4.5: Release slot back to limiter after request completes
             $this->releaseLimiterSlot();
@@ -646,10 +659,18 @@ final class MusicBrainzApi
      * Fetch an image and return as base64.
      *
      * The candidate URL arrives from the Cover Art Archive RESPONSE BODY —
-     * untrusted remote data. It is parsed here and only ever fetched when it
-     * is an https URL on coverartarchive.org (or a subdomain): a hostile or
-     * compromised art listing cannot aim the plugin's transport at internal
-     * hosts, other schemes, or the local filesystem.
+     * untrusted remote data — and every `Location` a server answers with is
+     * remote data too. The trust law: EVERY URL actually dialed for image
+     * bytes must pass isSafeCoverArtUrl() before the request. That is
+     * impossible through an auto-following transport (only the first hop
+     * would ever be gated — a legitimate listing could 302 to an internal
+     * address and the bytes would flow back silently), so image legs dial
+     * with the fence options `followRedirects => false` plus the
+     * `maxResponseBytes` budget and this method walks the chain itself:
+     * resolve the Location (absolute, protocol-relative or path-absolute),
+     * re-run the allowlist gate on it, refuse and log any hop that leaves
+     * the allow-list or downgrades the scheme, and bound the chain to
+     * MAX_IMAGE_REDIRECT_HOPS so a cycling chain dies at the bound.
      *
      * @param mixed $url Image URL candidate
      *
@@ -661,27 +682,68 @@ final class MusicBrainzApi
             return null;
         }
 
-        if (!self::isSafeCoverArtUrl($url)) {
-            $this->logger->warning('MusicBrainz: refused image URL outside coverartarchive.org', [
-                'url' => substr($url, 0, 256),
-            ]);
+        $options = [
+            'followRedirects' => false,
+            'maxResponseBytes' => self::MAX_IMAGE_RESPONSE_BYTES,
+        ];
+        $current = $url;
+        $hops = 0;
 
-            return null;
-        }
+        while (true) {
+            if (!self::isSafeCoverArtUrl($current)) {
+                $this->logger->warning('MusicBrainz: refused image URL outside coverartarchive.org', [
+                    'url' => substr($current, 0, 256),
+                ]);
 
-        try {
-            // Images are intentionally NOT etag-memoized (bulk); the cover
-            // memo above already dedupes per release. Rate signals still
-            // feed the shared backoff window.
-            $response = $this->requestWithLimiting($url, ['User-Agent' => $this->userAgent]);
-            $this->observeRateSignals($response);
+                return null;
+            }
+
+            try {
+                // Images are intentionally NOT etag-memoized (bulk); the cover
+                // memo above already dedupes per release. Rate signals still
+                // feed the shared backoff window.
+                $response = $this->requestWithLimiting($current, ['User-Agent' => $this->userAgent], [], $options);
+                $this->observeRateSignals($response);
+            } catch (\Throwable $e) {
+                $this->logger->warning('MusicBrainz: failed to fetch image', [
+                    'url' => $current,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return null;
+            }
+
+            if ($response->isTooLarge()) {
+                $this->logger->warning('MusicBrainz: refused oversized cover image response', [
+                    'url' => substr($current, 0, 256),
+                    'cap' => self::MAX_IMAGE_RESPONSE_BYTES,
+                ]);
+
+                return null;
+            }
+
+            $status = $response->status;
+            if ($status !== null && $status >= 300 && $status < 400) {
+                $next = $this->nextImageHop($response, $current, $hops);
+                if ($next === null) {
+                    return null;
+                }
+
+                $current = $next;
+                $hops++;
+
+                continue;
+            }
+
             if (!$response->ok() || $response->body === null) {
                 return null;
             }
 
             // M-29: hard byte cap BEFORE the base64 copy — a hostile or
             // misconfigured endpoint on an allow-listed host must never be
-            // able to balloon a resident worker's memory.
+            // able to balloon a resident worker's memory. The transport
+            // already enforces the same budget; this belt covers transports
+            // that deliver an over-budget body anyway.
             if (strlen($response->body) > self::MAX_IMAGE_RESPONSE_BYTES) {
                 $this->logger->warning('MusicBrainz: refused oversized cover image body', [
                     'bytes' => strlen($response->body),
@@ -692,14 +754,76 @@ final class MusicBrainzApi
             }
 
             return base64_encode($response->body);
-        } catch (\Throwable $e) {
-            $this->logger->warning('MusicBrainz: failed to fetch image', [
-                'url' => $url,
-                'error' => $e->getMessage(),
+        }
+    }
+
+    /**
+     * Resolve and gate the next hop of a cover-art redirect chain.
+     *
+     * Returns the validated absolute target to dial, or null to refuse the
+     * chain (over-long chain, missing/unparseable Location, or a target the
+     * allowlist gate rejects — each refusal leaves its own log line).
+     */
+    private function nextImageHop(HttpResponse $response, string $current, int $hops): ?string
+    {
+        if ($hops >= self::MAX_IMAGE_REDIRECT_HOPS) {
+            $this->logger->warning('MusicBrainz: refused cover image redirect chain beyond hop limit', [
+                'url' => substr($current, 0, 256),
+                'limit' => self::MAX_IMAGE_REDIRECT_HOPS,
             ]);
 
             return null;
         }
+
+        $location = trim($response->headers['location'] ?? '');
+        $target = $location === '' ? null : self::resolveImageRedirect($current, $location);
+
+        if ($target === null || !self::isSafeCoverArtUrl($target)) {
+            $this->logger->warning('MusicBrainz: refused image redirect outside coverartarchive.org', [
+                'from' => substr($current, 0, 256),
+                'to' => substr($location, 0, 256),
+            ]);
+
+            return null;
+        }
+
+        return $target;
+    }
+
+    /**
+     * RFC 3986 shorthand merge for a Location header: absolute URLs pass
+     * through (their scheme is the gate's problem, not the resolver's),
+     * protocol-relative targets inherit the base scheme, path-absolute
+     * targets inherit scheme + authority. Path-relative targets (no leading
+     * slash) are refused rather than guessed — CAA listings only ever carry
+     * absolute image URLs, and a bare-name hop is not worth a merging
+     * implementation.
+     */
+    private static function resolveImageRedirect(string $base, string $location): ?string
+    {
+        if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*:#', $location) === 1) {
+            return $location;
+        }
+
+        $baseParts = parse_url($base);
+        if (!is_array($baseParts) || !isset($baseParts['scheme'], $baseParts['host'])) {
+            return null;
+        }
+
+        if (str_starts_with($location, '//')) {
+            return $baseParts['scheme'] . ':' . $location;
+        }
+
+        if (str_starts_with($location, '/')) {
+            $origin = $baseParts['scheme'] . '://' . $baseParts['host'];
+            if (isset($baseParts['port'])) {
+                $origin .= ':' . $baseParts['port'];
+            }
+
+            return $origin . $location;
+        }
+
+        return null;
     }
 
     /**
