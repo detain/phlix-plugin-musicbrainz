@@ -34,9 +34,42 @@ final class HttpClient implements HttpClientInterface
 {
     private int $timeout;
 
-    public function __construct(int $timeout = 15)
-    {
+    /**
+     * Factory for the async transport. The production default constructs the
+     * host-supplied Workerman client; tests may inject a stand-in (the same
+     * seam doctrine as {@see MusicBrainzApi::$sleeper}) so the cooperative
+     * leg is exercisable without a resident runtime (M-MUSICBRAINZ-35).
+     *
+     * @var callable(array<string, int>): object
+     */
+    private $asyncClientFactory;
+
+    /**
+     * One sleep step of the cooperative wait. Production is usleep; the
+     * deadline math never trusts it — it is measured on hrtime.
+     *
+     * @var callable(int): void
+     */
+    private $asyncWaitSleeper;
+
+    /**
+     * @param (callable(array<string, int>): object)|null $asyncClientFactory
+     *   Test seam for the async transport; production passes nothing.
+     * @param (callable(int): void)|null $asyncWaitSleeper
+     *   Test seam for the cooperative wait sleep; production passes nothing.
+     */
+    public function __construct(
+        int $timeout = 15,
+        ?callable $asyncClientFactory = null,
+        ?callable $asyncWaitSleeper = null
+    ) {
         $this->timeout = $timeout;
+        $this->asyncClientFactory = $asyncClientFactory
+            ?? static fn (array $config): object => new \Workerman\Http\Client($config);
+        $this->asyncWaitSleeper = $asyncWaitSleeper
+            ?? static function (int $microseconds): void {
+                usleep($microseconds);
+            };
     }
 
     /**
@@ -75,8 +108,13 @@ final class HttpClient implements HttpClientInterface
         $followRedirects = self::followsRedirects($options);
         $maxResponseBytes = self::responseBudget($options);
 
-        /** @var array{done: bool, response: HttpResponse} $state */
-        $state = ['done' => false, 'response' => HttpResponse::failure()];
+        /**
+         * One atomic exchange record: completion flag, response value, and
+         * the abandonment flag late callbacks check (M-MUSICBRAINZ-35).
+         *
+         * @var array{done: bool, abandoned: bool, response: HttpResponse} $state
+         */
+        $state = ['done' => false, 'abandoned' => false, 'response' => HttpResponse::failure()];
 
         $request = [
             'method' => 'GET',
@@ -86,9 +124,19 @@ final class HttpClient implements HttpClientInterface
             $request['allow_redirects'] = ['max' => 0];
         }
 
-        $client = new \Workerman\Http\Client(['timeout' => $this->timeout]);
+        /** @var \Workerman\Http\Client $client */
+        $client = ($this->asyncClientFactory)(['timeout' => $this->timeout]);
         $client->request($url, $request + [
             'success' => static function ($response) use (&$state, $maxResponseBytes): void {
+                if ($state['abandoned']) {
+                    // Late arrival on an exchange whose caller already gave
+                    // up (M-MUSICBRAINZ-35): inert by law, never resurrect
+                    // a response for a caller that has moved on.
+                    unset($response);
+
+                    return;
+                }
+
                 $status = (int)$response->getStatusCode();
                 $body = ($status >= 200 && $status < 400) ? (string)$response->getBody() : null;
                 $headers = [];
@@ -112,17 +160,33 @@ final class HttpClient implements HttpClientInterface
             },
             'error' => static function ($exception) use (&$state): void {
                 unset($exception);
+                if ($state['abandoned']) {
+                    return;
+                }
+
                 $state['done'] = true;
             },
         ]);
 
-        // Cooperative wait — yields to the event loop (usleep is hooked under
-        // the Swoole runtime) so other worker tasks keep making progress.
-        $waited = 0.0;
-        $maxWait = (float)$this->timeout + 1.0;
-        while ($state['done'] === false && $waited < $maxWait) {
-            usleep(1000);
-            $waited += 0.001;
+        // Cooperative wait (M-MUSICBRAINZ-35) — yields to the event loop
+        // (usleep is hooked under the Swoole runtime) so other worker tasks
+        // keep making progress. The deadline is ABSOLUTE on the monotonic
+        // clock the API layer's pacing already uses: counting iterations at
+        // a nominal 1 ms made the real wait a function of sleep/wakeup
+        // latency — it could run far longer than timeout + 1s in a busy
+        // worker (or return early where usleep returns instantly).
+        $deadlineNs = hrtime(true) + ($this->timeout + 1) * 1000000000;
+        while ($state['done'] === false && hrtime(true) < $deadlineNs) {
+            ($this->asyncWaitSleeper)(1000);
+        }
+
+        if ($state['done'] === false) {
+            // Give up on the exchange. The library owns the connection and
+            // reaps it when the transfer ends — http-client exposes no
+            // per-request cancel — so making the callbacks inert is the
+            // full extent of the cancellation; the response value the
+            // caller receives is the initial failure either way.
+            $state['abandoned'] = true;
         }
 
         return $state['response'];

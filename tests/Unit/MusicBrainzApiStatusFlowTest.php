@@ -207,4 +207,134 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
         $this->assertSame($a1, $a2);
         $this->assertCount(2, $this->calls, 'Cover resolution for the same release must not be re-fetched.');
     }
+
+    public function testEtagMemoSkipsBodiesAboveTheByteCeiling(): void
+    {
+        // M-MUSICBRAINZ-33: the count bound says nothing about bytes. A body past the
+        // memo ceiling must not be retained — the revalidation miss is
+        // cheaper than pinning a multi-hundred-KB string in a resident
+        // worker. The observable law: the follow-up dial carries NO
+        // If-None-Match, because nothing was memorized to revalidate.
+        $huge = '{"id":"14652a6d-3c79-cb58-72e1-29a99be739e4","name":"' . str_repeat('x', 300 * 1024) . '"}';
+        $this->assertGreaterThan(262144, strlen($huge), 'Fixture must sit above the 256 KiB memo ceiling.');
+
+        $api = $this->api(static fn (int $n): HttpResponse => new HttpResponse(200, $huge, ['etag' => 'W/"big"']));
+
+        $first = $api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4');
+        $second = $api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4');
+        $this->assertSame($first, $second, 'Serving stays correct; only the retention is refused.');
+        $this->assertCount(2, $this->calls);
+        $this->assertArrayNotHasKey(
+            'If-None-Match',
+            $this->calls[1]['headers'],
+            'An over-ceiling body must never enter the memo, so revalidation cannot be attempted.'
+        );
+    }
+
+    public function testSmallEtagBodyStillEntersTheMemoUnderTheCeiling(): void
+    {
+        // The ceiling-side twin of the skip law: a body at 256 KiB minus one
+        // is normal working set and must keep its conditional revalidation.
+        $fits = '{"id":"14652a6d-3c79-cb58-72e1-29a99be739e4","name":"' . str_repeat('x', 262144 - 120) . '"}';
+        $this->assertLessThanOrEqual(262144, strlen($fits));
+
+        $api = $this->api(static function (int $n) use ($fits): HttpResponse {
+            if ($n === 1) {
+                return new HttpResponse(200, $fits, ['etag' => 'W/"fits"']);
+            }
+
+            return new HttpResponse(304, null);
+        });
+
+        $this->assertNotEmpty($api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4'));
+        $second = $api->getArtist('14652a6d-3c79-cb58-72e1-29a99be739e4');
+        $this->assertArrayHasKey('If-None-Match', $this->calls[1]['headers'], 'Sub-ceiling bodies keep revalidating.');
+        $this->assertSame(json_decode($fits, true)['name'], $second['name'] ?? null, 'The 304 serves from the memo.');
+    }
+
+    public function testTransientCoverBlipIsBoundedByExpiryAndHeals(): void
+    {
+        // M-MUSICBRAINZ-34: a failed cover resolution must not fossilize as permanent
+        // no-art. Null (no-art-or-failed) entries stay memoized only while
+        // their expiry window is open; a shaped entry WITHOUT an expiry on a
+        // null is the unbounded-fossil state this law kills.
+        $goodListing = json_encode([
+            'images' => [['front' => true, 'image' => 'https://covers.coverartarchive.org/i/ok']],
+        ]);
+        $api = $this->api(static function (int $n) use ($goodListing): HttpResponse {
+            if ($n === 1) {
+                return new HttpResponse(500, null); // archive blip
+            }
+
+            return HttpResponse::fromBody($goodListing); // later: listing + image
+        });
+
+        $mbid = '094ec1a7-6fea-aae2-2781-9f166f0b2e95';
+        $this->assertNull($api->getFrontCover($mbid));
+        $this->assertNull($api->getFrontCover($mbid));
+        $this->assertCount(1, $this->calls, 'Within the window even a failure memo short-circuits re-fetches.');
+
+        $property = new \ReflectionProperty(MusicBrainzApi::class, 'coverMemo');
+        /** @var array<string, mixed> $memo */
+        $memo = $property->getValue();
+        $entry = $memo[$mbid] ?? null;
+        $this->assertIsArray($entry, 'Cover memo entries must be shaped (art plus expiry).');
+        $this->assertArrayHasKey('expiresAtHrMs', $entry);
+        $this->assertIsInt(
+            $entry['expiresAtHrMs'],
+            'A null cover entry must carry a bounded expiry, never live forever.'
+        );
+
+        $entry['expiresAtHrMs'] = 1; // age it past the window
+        $memo[$mbid] = $entry;
+        $property->setValue(null, $memo);
+
+        $art = $api->getFrontCover($mbid);
+        $this->assertNotNull($art, 'An expired null entry must re-resolve, letting a blip heal.');
+        $this->assertCount(3, $this->calls, 'Re-resolution costs one listing and one image dial.');
+
+        /** @var array<string, mixed> $after */
+        $after = $property->getValue();
+        $this->assertArrayHasKey('expiresAtHrMs', $after[$mbid]);
+        $this->assertNull(
+            $after[$mbid]['expiresAtHrMs'],
+            'Successful art entries stay memoized indefinitely (no expiry), bounded only by FIFO and bytes.'
+        );
+    }
+
+    public function testOversizedCoverRenditionIsServedButNotMemoized(): void
+    {
+        // M-MUSICBRAINZ-34 byte budget: an art blob above the per-entry ceiling is
+        // returned to the caller but not retained — count AND bytes bound
+        // the memo, so a rendition set can never balloon a resident worker.
+        // 3 MiB + 1 raw becomes a base64 string past the 4 MiB ceiling while
+        // staying under the 10 MiB transport cap.
+        $raw = str_repeat('y', 3 * 1024 * 1024 + 1);
+        $this->assertGreaterThan(4 * 1024 * 1024, strlen(base64_encode($raw)));
+
+        $listing = json_encode([
+            'images' => [['front' => true, 'image' => 'https://covers.coverartarchive.org/i/big']],
+        ]);
+        $api = $this->api(static function (int $n, string $url) use ($listing, $raw): HttpResponse {
+            if (str_contains($url, 'coverartarchive.org/release/')) {
+                return HttpResponse::fromBody($listing);
+            }
+
+            return HttpResponse::fromBody($raw);
+        });
+
+        $mbid = '4a3e8f1c-2b77-4e52-9a1a-6d0f2f7b3c11';
+        $first = $api->getFrontCover($mbid);
+        $this->assertNotNull($first);
+        $this->assertCount(2, $this->calls);
+
+        $second = $api->getFrontCover($mbid);
+        $this->assertSame($first, $second, 'Serving stays correct; only the retention is refused.');
+        $this->assertCount(4, $this->calls, 'An over-ceiling rendition must be re-resolved, never pinned.');
+
+        $property = new \ReflectionProperty(MusicBrainzApi::class, 'coverMemo');
+        /** @var array<string, mixed> $memo */
+        $memo = $property->getValue();
+        $this->assertArrayNotHasKey($mbid, $memo, 'The over-ceiling blob must not sit in the memo.');
+    }
 }

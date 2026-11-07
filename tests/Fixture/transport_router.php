@@ -13,6 +13,10 @@
  *   /delay/S      -> sleep S seconds, then 200 'slow' (client-timeout leg)
  *   /etag         -> ETag '"v1"'; If-None-Match: '"v1"' -> 304, no body
  *   /redirect     -> 302 with Location: /final (fence/REDIR_PROTOCOLS legs)
+ *   /redirect-dead-https -> 302 with Location: https://127.0.0.1:1/x
+ *                  (fence-honoring leg: an https redirect target the transport
+ *                  must NEVER dial itself — the REDIR_PROTOCOLS floor permits
+ *                  https, so only the followRedirects=false fence stands)
  *   /final        -> 200 'final-body' (the redirect target)
  *   /bytes/N      -> 200 with an exactly N-byte body (byte-budget leg)
  *
@@ -78,6 +82,12 @@ if ($path === '/etag') {
 
 if ($path === '/redirect') {
     header('Location: /final');
+    http_response_code(302);
+    return;
+}
+
+if ($path === '/redirect-dead-https') {
+    header('Location: https://127.0.0.1:1/x');
     http_response_code(302);
     return;
 }

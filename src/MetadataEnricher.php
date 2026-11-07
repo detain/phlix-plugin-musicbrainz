@@ -81,10 +81,9 @@ final class MetadataEnricher
                     $trackData = $this->extractRecordingData($recording);
                     $albumMbid = self::firstId($recording['releases'] ?? null);
                     if ($albumMbid !== null) {
-                        $albumData = $this->fetchAlbumData($albumMbid);
-                        if ($this->settings->fetchAlbumArt && !empty($albumData)) {
-                            $albumArtBase64 = $this->api->getFrontCover($albumMbid);
-                        }
+                        $leg = $this->resolveAlbumAndArt($albumMbid);
+                        $albumData = $leg['album'];
+                        $albumArtBase64 = $leg['art'];
                     }
                 }
             }
@@ -100,10 +99,9 @@ final class MetadataEnricher
                     // Get album from recording
                     $albumMbid = self::firstId($recording['releases'] ?? null);
                     if ($albumMbid !== null) {
-                        $albumData = $this->fetchAlbumData($albumMbid);
-                        if ($this->settings->fetchAlbumArt && !empty($albumData)) {
-                            $albumArtBase64 = $this->api->getFrontCover($albumMbid);
-                        }
+                        $leg = $this->resolveAlbumAndArt($albumMbid);
+                        $albumData = $leg['album'];
+                        $albumArtBase64 = $leg['art'];
                     }
 
                     // Get artist from recording
@@ -124,10 +122,9 @@ final class MetadataEnricher
                 if (count($releaseResults) > 0) {
                     $albumMbid = self::firstId($releaseResults);
                     if ($albumMbid !== null) {
-                        $albumData = $this->fetchAlbumData($albumMbid);
-                        if ($this->settings->fetchAlbumArt && !empty($albumData)) {
-                            $albumArtBase64 = $this->api->getFrontCover($albumMbid);
-                        }
+                        $leg = $this->resolveAlbumAndArt($albumMbid);
+                        $albumData = $leg['album'];
+                        $albumArtBase64 = $leg['art'];
                     }
                 }
             }
@@ -381,6 +378,25 @@ final class MetadataEnricher
         $line = trim($line);
 
         return $line === '' ? null : $line;
+    }
+
+    /**
+     * The shared album-and-art leg that every search path in enrich() runs
+     * once it has a release MBID. Three sites used to carry this sequence
+     * verbatim — a policy change (art gating, rendition rules, budgets)
+     * previously had to be made in triplicate and silently missed one.
+     *
+     * @return array{album: array<string, mixed>, art: string|null}
+     */
+    private function resolveAlbumAndArt(string $albumMbid): array
+    {
+        $albumData = $this->fetchAlbumData($albumMbid);
+        $art = null;
+        if ($this->settings->fetchAlbumArt && !empty($albumData)) {
+            $art = $this->api->getFrontCover($albumMbid);
+        }
+
+        return ['album' => $albumData, 'art' => $art];
     }
 
     /**

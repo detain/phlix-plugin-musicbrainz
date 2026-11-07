@@ -162,4 +162,57 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertSame(true, $array['enabled']);
         $this->assertSame('Test/1.0 (test@example.com)', $array['user_agent']);
     }
+
+    public function testSpaProjectionIsDerivedOverTheFieldAllowList(): void
+    {
+        // M-MUSICBRAINZ-36: the SPA payload is a projection, not a copy. Every SPA key
+        // must exist in the persistence array with the same value, the key
+        // set is exactly the reviewed field list, and — the drift alarm — a
+        // future persistence key stays OUT of the SPA until it is declared
+        // in the allow list itself (mutation-proven: a canary key added to
+        // toArray() must not surface here).
+        $settings = new MusicBrainzSettings(
+            enabled: true,
+            userAgent: 'Test/1.0 (test@example.com)',
+            rateLimitDelay: 1500,
+            autoEnrich: false,
+            fetchAlbumArt: true,
+            searchDepth: 'deep'
+        );
+
+        $full = $settings->toArray();
+        $spa = $settings->toSpaArray();
+
+        $this->assertSame(
+            ['enabled', 'user_agent', 'rate_limit_delay', 'auto_enrich', 'fetch_album_art', 'search_depth'],
+            array_keys($spa),
+            'The SPA field set is an explicit reviewed list, in order.'
+        );
+        foreach ($spa as $key => $value) {
+            $this->assertArrayHasKey($key, $full, 'The projection can only ever carry persistence fields.');
+            $this->assertSame($full[$key], $value);
+        }
+    }
+
+    public function testEnabledIsParsedStrictlyAndNeverCast(): void
+    {
+        // M-MUSICBRAINZ-37: a loose (bool) cast maps any non-empty string — including
+        // a serialized 'false' — to true, which switches the plugin ON from
+        // junk input. Parse, do not cast: real booleans and the int 0/1
+        // shapes pass through, anything unrecognized means off.
+        $this->assertTrue(MusicBrainzSettings::fromArray(['enabled' => true])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => false])->enabled);
+        $this->assertTrue(MusicBrainzSettings::fromArray(['enabled' => 1])->enabled, 'Host may carry int 0/1.');
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => 0])->enabled);
+        $this->assertFalse(
+            MusicBrainzSettings::fromArray(['enabled' => 'false'])->enabled,
+            'A serialized-form "false" string must never switch the plugin on.'
+        );
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => 'true'])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => '1'])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => 2])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => 1.0])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => null])->enabled);
+        $this->assertFalse(MusicBrainzSettings::fromArray([])->enabled, 'Missing stays default-off.');
+    }
 }

@@ -42,6 +42,24 @@ final class MusicBrainzSettings
      */
     public const MIN_RATE_LIMIT_DELAY_MS = 1000;
 
+    /**
+     * The exact field set the SPA projection exposes (M-MUSICBRAINZ-36): a
+     * future persistence field stays OUT of the SPA payload until it is
+     * declared here. The projection is derived over this list from
+     * toArray(), never re-typed by hand — the verbatim-copy shape let the
+     * two arrays drift a field apart silently.
+     *
+     * @var list<string>
+     */
+    private const SPA_FIELDS = [
+        'enabled',
+        'user_agent',
+        'rate_limit_delay',
+        'auto_enrich',
+        'fetch_album_art',
+        'search_depth',
+    ];
+
     public function __construct(
         public readonly bool $enabled = false,
         public readonly string $userAgent = self::DEFAULT_USER_AGENT,
@@ -73,7 +91,13 @@ final class MusicBrainzSettings
             : self::DEFAULT_USER_AGENT;
 
         return new self(
-            enabled: (bool)($data['enabled'] ?? false),
+            // M-MUSICBRAINZ-37: the master switch parses, never casts. A
+            // (bool) cast maps ANY non-empty string — including a
+            // serialized 'false' — to true, switching the whole plugin on
+            // from junk input. The permissive sub-behavior defaults below
+            // stay cast-scoped because `enabled` gates everything they
+            // touch; the entry point itself is fail-closed.
+            enabled: self::parseStrictBool($data['enabled'] ?? null, false),
             userAgent: $userAgent,
             rateLimitDelay: is_int($data['rate_limit_delay'] ?? null) && $data['rate_limit_delay'] > 0
                 ? max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
@@ -97,6 +121,29 @@ final class MusicBrainzSettings
         $controls = preg_match('/\p{Cc}/u', $value);
 
         return $controls === 0;
+    }
+
+    /**
+     * Strict boolean parse for wire-shaped config (M-MUSICBRAINZ-37): real
+     * booleans pass, the int 0/1 shapes hosts may carry pass, and anything
+     * else — notably any string, which a (bool) cast truthifies even when
+     * it spells 'false' — falls to the default instead of guessing.
+     */
+    private static function parseStrictBool(mixed $value, bool $default): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if ($value === 0) {
+            return false;
+        }
+
+        if ($value === 1) {
+            return true;
+        }
+
+        return $default;
     }
 
     /**
@@ -138,17 +185,19 @@ final class MusicBrainzSettings
     /**
      * Convert to SPA-safe array (no secrets, read-only projection).
      *
+     * Derived field-by-field over {@see SPA_FIELDS} from toArray()
+     * (M-MUSICBRAINZ-36): the SPA can only ever expose declared fields.
+     *
      * @return array<string, mixed>
      */
     public function toSpaArray(): array
     {
-        return [
-            'enabled' => $this->enabled,
-            'user_agent' => $this->userAgent,
-            'rate_limit_delay' => $this->rateLimitDelay,
-            'auto_enrich' => $this->autoEnrich,
-            'fetch_album_art' => $this->fetchAlbumArt,
-            'search_depth' => $this->searchDepth,
-        ];
+        $full = $this->toArray();
+        $projection = [];
+        foreach (self::SPA_FIELDS as $key) {
+            $projection[$key] = $full[$key];
+        }
+
+        return $projection;
     }
 }

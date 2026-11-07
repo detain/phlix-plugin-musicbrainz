@@ -245,6 +245,36 @@ final class HttpClientTest extends TestCase
         $this->assertNotSame('final-body', $result->body);
     }
 
+    public function testFenceHonoringTransportNeverDialsTheRedirectTargetItself(): void
+    {
+        // Single-mutant pin for the fence itself (muD: FOLLOWLOCATION forced
+        // true). An https Location on a dead loopback port is deliberately
+        // chosen where the REDIR_PROTOCOLS floor cannot mask the fault — the
+        // floor PERMITS https redirects, so a transport that stopped
+        // honoring followRedirects=false actually dials it. Measured both
+        // ways in this environment: honoring returns the completed 3xx with
+        // its own (empty) body; dialing fails the connect and libcurl still
+        // reports the first hop's 302 — the status alone would survive the
+        // fault, but the destroyed transfer shows exactly in the body
+        // (string "" vs null). The cover-art walk consumes the completed
+        // 302 to re-gate the hop itself.
+        $client = new HttpClient(10);
+        $result = $client->get(
+            self::endpoint('/redirect-dead-https'),
+            [],
+            [],
+            ['followRedirects' => false]
+        );
+
+        $this->assertSame(302, $result->status, 'The fence must hand the 3xx back.');
+        $this->assertSame('https://127.0.0.1:1/x', $result->headers['location'] ?? null);
+        $this->assertSame(
+            '',
+            $result->body,
+            'The 3xx exchange must COMPLETE — a null body here means the transport dialed the target itself.'
+        );
+    }
+
     public function testMaxResponseBytesAbortsBeforeBufferingTheBody(): void
     {
         $client = new HttpClient(10);

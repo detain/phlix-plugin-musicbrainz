@@ -75,14 +75,41 @@ final class MusicBrainzApi
     /** @var int Conditional-GET (ETag) memo capacity, FIFO-evicted */
     private const ETAG_CACHE_SIZE = 256;
 
+    /**
+     * Byte ceiling for one memoized ETag body (M-MUSICBRAINZ-33):
+     * the count bound alone let 256 search replies of hundreds of KB each
+     * pin tens of MB into a resident worker. A revalidation miss costs one
+     * extra exchange; a retained multi-hundred-KB string costs for the life
+     * of the entry — so oversized bodies are served without being stored.
+     */
+    private const ETAG_MEMO_MAX_BODY_BYTES = 256 * 1024;
+
     /** @var int Negative (404) memo capacity, FIFO-evicted */
     private const NEGATIVE_CACHE_SIZE = 512;
 
     /** @var int How long a 404 stays "known absent" (ms) */
     private const NEGATIVE_TTL_MS = 3600000;
 
-    /** @var int Cover-art base64 memo capacity — values are large images */
+    /** @var int Cover-art memo capacity — values are large images */
     private const COVER_MEMO_SIZE = 4;
+
+    /**
+     * Byte ceiling for one retained cover rendition (base64 characters,
+     * M-MUSICBRAINZ-34): four entries of unbounded originals were a ~53 MB
+     * worst case. Renditions above this are served but re-resolved on
+     * demand — count AND bytes now bound the memo (4 × 4 MiB worst case).
+     */
+    private const COVER_MEMO_MAX_ENTRY_BYTES = 4 * 1024 * 1024;
+
+    /**
+     * How long a null cover resolution (no art, or the M-MUSICBRAINZ-04
+     * failure collapse) stays memoized (M-MUSICBRAINZ-34): the neighbouring
+     * 404 memo is TTL-bounded and this one must not be the unbounded
+     * sibling — one transient Cover-Art-Archive blip used to fossilize as
+     * no-art for the life of the worker. Re-probe cadence matches
+     * NEGATIVE_TTL_MS.
+     */
+    private const COVER_MEMO_NULL_TTL_MS = self::NEGATIVE_TTL_MS;
 
     private HttpClientInterface $httpClient;
     private string $userAgent;
@@ -122,10 +149,12 @@ final class MusicBrainzApi
     private static array $negativeCache = [];
 
     /**
-     * Small cover-art memo: release MBID => base64 image (or null = none).
-     * Base64 art is bulky, so the capacity is deliberately tiny (FIFO).
+     * Small cover-art memo: release MBID => shaped entry (art base64 or
+     * null, plus the expiry of a null verdict). Base64 art is bulky, so the
+     * capacity is deliberately tiny (FIFO) and entries past the byte
+     * ceiling are never retained (M-MUSICBRAINZ-34).
      *
-     * @var array<string, string|null>
+     * @var array<string, array{art: string|null, expiresAtHrMs: int|null}>
      */
     private static array $coverMemo = [];
 
@@ -354,7 +383,15 @@ final class MusicBrainzApi
         }
 
         $etag = $response->etag();
-        if ($response->ok() && $response->body !== null && $etag !== null) {
+        // M-MUSICBRAINZ-33: the byte ceiling is tested BEFORE the count
+        // eviction, so an over-ceiling body cannot evict a useful entry
+        // merely to then refuse storing itself.
+        if (
+            $response->ok()
+            && $response->body !== null
+            && $etag !== null
+            && strlen($response->body) <= self::ETAG_MEMO_MAX_BODY_BYTES
+        ) {
             if (count(self::$etagStore) >= self::ETAG_CACHE_SIZE) {
                 unset(self::$etagStore[array_key_first(self::$etagStore)]);
             }
@@ -578,10 +615,14 @@ final class MusicBrainzApi
     /**
      * Get the primary front cover image for a release.
      *
-     * Results (including "this release has no art") are memoized per release
-     * MBID in a deliberately tiny FIFO window: base64 images are bulky, but
-     * re-resolving cover art on every enrichment of items from one album was
-     * pure waste.
+     * Results are memoized per release MBID in a deliberately tiny FIFO
+     * window with byte- and time-bounded entries (M-MUSICBRAINZ-34): a
+     * successful rendition stays until evicted or over the ceiling, and a
+     * null verdict ("no art", or the failure collapse) stays only for the
+     * null-TTL window so one archive blip cannot fossilize as no-art for
+     * the life of a resident worker. Re-resolving cover art on every
+     * enrichment of items from one album was pure waste — now it is only
+     * pure waste when the entry is genuinely worth retaining.
      *
      * @param string $releaseMbid MusicBrainz release ID
      *
@@ -592,16 +633,39 @@ final class MusicBrainzApi
      */
     public function getFrontCover(string $releaseMbid): ?string
     {
-        if (array_key_exists($releaseMbid, self::$coverMemo)) {
-            return self::$coverMemo[$releaseMbid];
+        $entry = self::$coverMemo[$releaseMbid] ?? null;
+        if ($entry !== null) {
+            if ($entry['expiresAtHrMs'] === null || $entry['expiresAtHrMs'] > self::monotonicMs()) {
+                return $entry['art'];
+            }
+
+            unset(self::$coverMemo[$releaseMbid]);
         }
 
         $resolved = $this->resolveFrontCover($releaseMbid);
 
+        if ($resolved === null) {
+            if (count(self::$coverMemo) >= self::COVER_MEMO_SIZE) {
+                unset(self::$coverMemo[array_key_first(self::$coverMemo)]);
+            }
+            self::$coverMemo[$releaseMbid] = [
+                'art' => null,
+                'expiresAtHrMs' => self::monotonicMs() + self::COVER_MEMO_NULL_TTL_MS,
+            ];
+
+            return null;
+        }
+
+        if (strlen($resolved) > self::COVER_MEMO_MAX_ENTRY_BYTES) {
+            // Served, not retained — and tested BEFORE eviction so a blob
+            // it will not even keep cannot cull a useful entry.
+            return $resolved;
+        }
+
         if (count(self::$coverMemo) >= self::COVER_MEMO_SIZE) {
             unset(self::$coverMemo[array_key_first(self::$coverMemo)]);
         }
-        self::$coverMemo[$releaseMbid] = $resolved;
+        self::$coverMemo[$releaseMbid] = ['art' => $resolved, 'expiresAtHrMs' => null];
 
         return $resolved;
     }
