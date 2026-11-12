@@ -32,6 +32,13 @@ namespace Phlix\Plugin\MusicBrainz;
  * https, no userinfo, service hosts only — and follows redirects itself,
  * re-gating each hop.
  *
+ * TLS posture (MBS-17): both transports assert peer-chain and peer-name
+ * verification explicitly (cURL VERIFYPEER/VERIFYHOST=2; the Workerman
+ * client gets an `ssl` stream context with verify_peer/verify_peer_name).
+ * SNI follows the URL host on both. The trust store itself is the host's
+ * (system CA bundle / php.ini openssl.cafile) — that part is deliberately
+ * trust-in-host-defaults.
+ *
  * @package Phlix\Plugin\MusicBrainz
  */
 final class HttpClient implements HttpClientInterface
@@ -44,7 +51,7 @@ final class HttpClient implements HttpClientInterface
      * seam doctrine as {@see MusicBrainzApi::$sleeper}) so the cooperative
      * leg is exercisable without a resident runtime (M-MUSICBRAINZ-35).
      *
-     * @var callable(array<string, int>): object
+     * @var callable(array<string, mixed>): object
      */
     private $asyncClientFactory;
 
@@ -69,7 +76,7 @@ final class HttpClient implements HttpClientInterface
     private bool $allowLoopbackHttp;
 
     /**
-     * @param (callable(array<string, int>): object)|null $asyncClientFactory
+     * @param (callable(array<string, mixed>): object)|null $asyncClientFactory
      *   Test seam for the async transport; production passes nothing.
      * @param (callable(int): void)|null $asyncWaitSleeper
      *   Test seam for the cooperative wait sleep; production passes nothing.
@@ -213,7 +220,17 @@ final class HttpClient implements HttpClientInterface
         ];
 
         /** @var \Workerman\Http\Client $client */
-        $client = ($this->asyncClientFactory)(['timeout' => $this->timeout]);
+        $client = ($this->asyncClientFactory)([
+            'timeout' => $this->timeout,
+            // MBS-17: explicit TLS posture on the async transport too.
+            'context' => [
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                    'allow_self_signed' => false,
+                ],
+            ],
+        ]);
         $client->request($url, $request + [
             'success' => static function ($response) use (&$state, $maxResponseBytes): void {
                 if ($state['abandoned']) {
@@ -431,7 +448,12 @@ final class HttpClient implements HttpClientInterface
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
             // get() follows hop by hop and re-gates each Location (MBS-2).
             CURLOPT_FOLLOWLOCATION => false,
-                        CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
+            // MBS-17: assert the TLS posture explicitly instead of leaning
+            // on host php.ini / libcurl defaults — verify the chain and the
+            // certificate name (SNI is derived from the URL host by libcurl).
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
             CURLOPT_USERAGENT => $userAgent,
             CURLOPT_HEADERFUNCTION => static function ($handle, string $header) use (&$responseHeaders): int {
                 $line = trim($header);
