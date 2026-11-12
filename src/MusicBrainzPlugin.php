@@ -127,6 +127,14 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         // Rebuild API client + throttle from new settings.
         $this->api = $this->buildApi();
         $this->enricher = new MetadataEnricher($this->api, $this->settings, $this->logger);
+
+        // MBS-11: the live drain timer was armed at the OLD interval; del it
+        // and re-add at the rebuilt queue's interval. Disarm resets the
+        // armed state first, so repeat configure() never double-arms.
+        if ($this->drainTimerStarted) {
+            $this->disarmDrainTimer();
+            $this->ensureDrainTimerStarted();
+        }
     }
 
     /**
@@ -175,16 +183,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         // flag stayed set so a later re-enable could not re-arm cleanly.
         // Tear the timer down (when its id was captured and a loop is
         // alive), reset the arming state and clear the enabled bit.
-        if ($this->drainTimerId !== null && class_exists(\Workerman\Timer::class)) {
-            try {
-                \Workerman\Timer::del($this->drainTimerId);
-            } catch (\Throwable) {
-                // No live event loop — the timer died with its worker.
-            }
-        }
-
-        $this->drainTimerId = null;
-        $this->drainTimerStarted = false;
+        $this->disarmDrainTimer();
         $this->enabled = false;
         $this->itemRepository = null;
         $this->logger->info('MusicBrainz: plugin disabled');
@@ -367,15 +366,6 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     }
 
     /**
-     * Parse one host-metadata value at the enrichment boundary.
-     *
-     * `metadata_json` is open-ended mixed: ID3-style multi-value tags persist
-     * as ARRAYS, and any scalar type can appear. Handing that raw to the
-     * enricher's strict `?string` params used to kill the whole drain leg with
-     * a TypeError. Non-conforming (or blank) values parse away to null —
-     * enrichment then proceeds with whatever genuinely survives.
-     */
-    /**
      * Scrub a file-derived / operator-supplied string for the log sink:
      * strip Cc/Cf (newline log-forging, bidi overrides) and cap codepoints.
      */
@@ -394,6 +384,15 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         return substr($trimmed, 0, $cap);
     }
 
+    /**
+     * Parse one host-metadata value at the enrichment boundary.
+     *
+     * `metadata_json` is open-ended mixed: ID3-style multi-value tags persist
+     * as ARRAYS, and any scalar type can appear. Handing that raw to the
+     * enricher's strict `?string` params used to kill the whole drain leg with
+     * a TypeError. Non-conforming (or blank) values parse away to null —
+     * enrichment then proceeds with whatever genuinely survives.
+     */
     private static function stringMeta(mixed $value): ?string
     {
         if (!is_string($value)) {
@@ -473,6 +472,24 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     private function buildQueue(): EnrichmentQueue
     {
         return new EnrichmentQueue($this->settings->rateLimitDelay / 1000.0);
+    }
+
+    /**
+     * Delete the live drain timer (when its id was captured and a loop is
+     * alive) and reset the arming state.
+     */
+    private function disarmDrainTimer(): void
+    {
+        if ($this->drainTimerId !== null && class_exists(\Workerman\Timer::class)) {
+            try {
+                \Workerman\Timer::del($this->drainTimerId);
+            } catch (\Throwable) {
+                // No live event loop — the timer died with its worker.
+            }
+        }
+
+        $this->drainTimerId = null;
+        $this->drainTimerStarted = false;
     }
 
     /**

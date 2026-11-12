@@ -90,6 +90,29 @@ final class MusicBrainzPluginDisableTest extends TestCase
         self::assertFalse($flagProperty->getValue($plugin));
     }
 
+    public function testConfigureDisarmsStaleDrainTimerState(): void
+    {
+        $plugin = $this->configuredPlugin();
+        $mirror = new ReflectionObject($plugin);
+
+        $idProperty = $mirror->getProperty('drainTimerId');
+        $idProperty->setAccessible(true);
+        $idProperty->setValue($plugin, 42);
+        $flagProperty = $mirror->getProperty('drainTimerStarted');
+        $flagProperty->setAccessible(true);
+        $flagProperty->setValue($plugin, true);
+
+        // MBS-11: configure() deletes the old-interval timer and re-adds at
+        // the new one. Without a Workerman loop the re-add is a no-op, so
+        // the stale id/flag must be cleared (never left pointing at the old
+        // timer), and a repeat configure() must stay clean.
+        $plugin->configure(['enabled' => true, 'user_agent' => 'PhlixTest/1.0 https://example.invalid', 'rate_limit_delay' => 2000]);
+        $plugin->configure(['enabled' => true, 'user_agent' => 'PhlixTest/1.0 https://example.invalid']);
+
+        self::assertNotSame(42, $idProperty->getValue($plugin));
+        self::assertFalse($flagProperty->getValue($plugin));
+    }
+
     public function testTimerIdIsCapturedTypeContract(): void
     {
         $mirror = new ReflectionObject(new MusicBrainzPlugin());
