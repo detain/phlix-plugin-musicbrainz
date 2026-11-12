@@ -232,4 +232,36 @@ final class MusicBrainzApiJsonBudgetTest extends TestCase
         $this->assertSame(self::MBID, $artist['id']);
         $this->assertSame([], self::oversized($logger->records));
     }
+
+    /**
+     * MBS-6: the per-body cap (256 KiB) times the 256-entry count bound
+     * allowed ~64 MiB resident; the memo now also FIFO-evicts against an
+     * aggregate 4 MiB ceiling and keeps its byte sum exact.
+     */
+    public function testEtagMemoAggregateBytesStayUnderCeiling(): void
+    {
+        $logger = $this->recordingLogger();
+        $body = '{"pad":"' . str_repeat('x', 200 * 1024) . '"}';
+        $h = $this->harness(
+            static fn (int $n, string $url): HttpResponse => new HttpResponse(200, $body, ['etag' => '"e' . $n . '"']),
+            $logger
+        );
+
+        for ($i = 0; $i < 60; $i++) {
+            $h->api->searchArtists('artist' . $i);
+        }
+
+        $store = new \ReflectionProperty(MusicBrainzApi::class, 'etagStore');
+        /** @var array<string, array{body: string}> $entries */
+        $entries = $store->getValue();
+        $sum = array_sum(array_map(static fn (array $e): int => strlen($e['body']), $entries));
+        $ceiling = 4 * 1024 * 1024;
+
+        $this->assertLessThanOrEqual($ceiling, $sum, 'Aggregate memoized bytes must respect the ceiling.');
+        $this->assertGreaterThan(0, count($entries), 'Memo still retains recent entries.');
+        $this->assertLessThan(60, count($entries), 'Older entries were FIFO-evicted.');
+
+        $counter = new \ReflectionProperty(MusicBrainzApi::class, 'etagStoreBytes');
+        $this->assertSame($sum, $counter->getValue(), 'Tracked byte sum must equal the real sum.');
+    }
 }

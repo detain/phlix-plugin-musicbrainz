@@ -108,6 +108,14 @@ final class MusicBrainzApi
      */
     private const ETAG_MEMO_MAX_BODY_BYTES = 256 * 1024;
 
+    /**
+     * Aggregate byte ceiling for the whole ETag memo (MBS-6): the per-body
+     * cap times the 256-entry count bound still allowed ~64 MiB of resident
+     * bodies. The sum of stored body bytes is tracked and FIFO-evicted
+     * against this ceiling (a 256 KiB body still fits; 16 of them fill it).
+     */
+    private const ETAG_MEMO_MAX_TOTAL_BYTES = 4 * 1024 * 1024;
+
     /** @var int Negative (404) memo capacity, FIFO-evicted */
     private const NEGATIVE_CACHE_SIZE = 512;
 
@@ -165,6 +173,9 @@ final class MusicBrainzApi
      * @var array<string, array{etag: string, body: string, headers: array<string, string>}>
      */
     private static array $etagStore = [];
+
+    /** @var int Sum of body bytes currently held in $etagStore (MBS-6) */
+    private static int $etagStoreBytes = 0;
 
     /**
      * Process-wide negative memo (404 => "known absent"): cache key => expiry
@@ -237,6 +248,7 @@ final class MusicBrainzApi
         self::$backoffUntilHrMs = null;
         self::$nextSlotHrMs = null;
         self::$etagStore = [];
+        self::$etagStoreBytes = 0;
         self::$negativeCache = [];
         self::$coverMemo = [];
     }
@@ -421,7 +433,7 @@ final class MusicBrainzApi
             // the wire. A poisoned entry is rejected AND dropped — its body
             // cannot be revalidated, so the exchange degrades to a plain
             // unconditional GET (and a 304 can never be served from it).
-            unset(self::$etagStore[$key]);
+            self::etagForget($key);
             $stored = null;
         }
         if ($stored !== null) {
@@ -481,13 +493,29 @@ final class MusicBrainzApi
             && $etag !== null
             && strlen($response->body) <= self::ETAG_MEMO_MAX_BODY_BYTES
         ) {
-            if (count(self::$etagStore) >= self::ETAG_CACHE_SIZE) {
-                unset(self::$etagStore[array_key_first(self::$etagStore)]);
+            $bytes = strlen($response->body);
+            self::etagForget($key);
+            while (
+                self::$etagStore !== []
+                && (count(self::$etagStore) >= self::ETAG_CACHE_SIZE
+                    || self::$etagStoreBytes + $bytes > self::ETAG_MEMO_MAX_TOTAL_BYTES)
+            ) {
+                self::etagForget((string)array_key_first(self::$etagStore));
             }
             self::$etagStore[$key] = ['etag' => $etag, 'body' => $response->body, 'headers' => $response->headers];
+            self::$etagStoreBytes += $bytes;
         }
 
         return $response;
+    }
+
+    /** Drop one ETag memo entry, keeping the aggregate byte sum exact (MBS-6). */
+    private static function etagForget(string $key): void
+    {
+        if (isset(self::$etagStore[$key])) {
+            self::$etagStoreBytes -= strlen(self::$etagStore[$key]['body']);
+            unset(self::$etagStore[$key]);
+        }
     }
 
     /**
