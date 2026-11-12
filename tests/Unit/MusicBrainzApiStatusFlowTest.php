@@ -66,6 +66,18 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
         );
     }
 
+    /**
+     * MBS-1 disclosed rotation: pacing slots are now reserved process-wide
+     * up front, and the no-op test sleeper never lets real time pass, so a
+     * reserved slot would stay "in the future" forever. Drop it to model
+     * the elapsed park (the backoff level/window state is left untouched).
+     */
+    private function elapsePacingSlot(): void
+    {
+        $prop = new \ReflectionProperty(MusicBrainzApi::class, 'nextSlotHrMs');
+        $prop->setValue(null, null);
+    }
+
     public function testRateLimitedResponsesDriveExponentialBackoffAndReset(): void
     {
         $api = $this->api(static fn (int $n): HttpResponse => match (true) {
@@ -90,6 +102,7 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
         // observe still widens once the configured delay is nonzero — asserted
         // by the second test. Here the window cleared, so third call no-op.
         $this->slept = [];
+        $this->elapsePacingSlot();
         $api->searchArtists('x');
         $this->assertSame([], $this->slept, 'A reset window must not park on delay=0.');
     }
@@ -142,6 +155,7 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
                 return $n === 1 ? new HttpResponse(429, null) : HttpResponse::fromBody('{"artists":[]}');
             }
         };
+        $this->elapsePacingSlot();
         $api2 = new MusicBrainzApi($client2, 'PhlixTest/1.0 (https://example.com/contact)', 1100, null,
             static function (int $ms) use (&$slept): void {
                 $slept[] = $ms;

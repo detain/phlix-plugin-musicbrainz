@@ -51,7 +51,7 @@ All settings are optional — MusicBrainz is an open service, so no API key is r
 | `rate_limit_delay` | integer | `1100` | Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). Values below 1000 are raised to the 1000 ms ToS floor; values above 60000 are capped at the 60000 ms ceiling; values that are not positive whole numbers fall back to the 1100 default. |
 | `auto_enrich` | boolean | `true` | Automatically enrich music items as they are scanned. Enrichment runs through a throttled queue (one item per rate-limit interval, up to 10000 waiting), so large scans fill in gradually. Optional; default on. |
 | `fetch_album_art` | boolean | `true` | Pull cover art via the Cover Art Archive. Optional; default on. |
-| `search_depth` | string | `normal` | How hard to search for matches: fast, normal or deep. Fast runs one recording search; normal also searches releases; deep also searches artists when none was found, costing extra requests. Optional; default normal. |
+| `search_depth` | string | `normal` | How hard to search for matches: fast, normal or deep. Fast skips the release and artist fallback searches; normal also searches releases; deep also searches artists when none was found, costing extra requests. Optional; default normal. |
 
 The `user_agent` policy mirrors the [MusicBrainz API etiquette](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting) rules. The Description cells
 above are byte-identical to the `plugin.json` manifest strings the admin UI

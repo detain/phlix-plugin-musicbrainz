@@ -143,8 +143,11 @@ final class MusicBrainzApi
     /** @var callable(int):void Test seam for the pacing/backoff sleep */
     private $sleeper;
 
-    /** Monotonic millisecond stamp of the last dispatched request. */
-    private ?int $lastRequestHrMs = null;
+    /**
+     * Process-wide monotonic millisecond stamp of the next pacing slot to
+     * award (MBS-1): reserved atomically before any sleep yields.
+     */
+    private static ?int $nextSlotHrMs = null;
 
     /**
      * Process-wide rate-limit backoff (M-MUSICBRAINZ-08): shared across
@@ -232,6 +235,7 @@ final class MusicBrainzApi
     {
         self::$backoffLevel = 0;
         self::$backoffUntilHrMs = null;
+        self::$nextSlotHrMs = null;
         self::$etagStore = [];
         self::$negativeCache = [];
         self::$coverMemo = [];
@@ -1191,24 +1195,23 @@ final class MusicBrainzApi
      */
     private function applyRateLimiting(): void
     {
+        // Reserve the slot BEFORE yielding (MBS-1): read-and-advance of the
+        // process-wide next-award stamp has no yield point between them, so
+        // overlapping coroutines each claim a distinct slot and stack
+        // rateLimitDelay apart instead of all observing the same stale
+        // last-dispatch stamp and co-firing after one sleep.
         $now = self::monotonicMs();
-        $waitMs = 0;
+        $slot = max($now, self::$nextSlotHrMs ?? $now);
 
-        if ($this->lastRequestHrMs !== null) {
-            $elapsed = $now - $this->lastRequestHrMs;
-            if ($elapsed < $this->rateLimitDelay) {
-                $waitMs = $this->rateLimitDelay - $elapsed;
-            }
+        if (self::$backoffUntilHrMs !== null && self::$backoffUntilHrMs > $slot) {
+            $slot = self::$backoffUntilHrMs;
         }
 
-        if (self::$backoffUntilHrMs !== null && self::$backoffUntilHrMs > $now) {
-            $waitMs = max($waitMs, self::$backoffUntilHrMs - $now);
-        }
+        self::$nextSlotHrMs = $slot + $this->rateLimitDelay;
+        $waitMs = $slot - $now;
 
         if ($waitMs > 0) {
             ($this->sleeper)($waitMs);
         }
-
-        $this->lastRequestHrMs = self::monotonicMs();
     }
 }

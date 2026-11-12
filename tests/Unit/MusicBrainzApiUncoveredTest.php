@@ -288,6 +288,37 @@ final class MusicBrainzApiUncoveredTest extends TestCase
     }
 
     /**
+     * MBS-1: the pacing slot is reserved before the sleep yields, so
+     * overlapping entrants (the sleeper here does not advance time, as when
+     * several coroutines all park before any resumes) stack one delay apart
+     * rather than all waiting the same stale amount and co-firing.
+     */
+    public function testOverlappingEntrantsStackPacingSlots(): void
+    {
+        $waits = [];
+        $httpClient = new class implements HttpClientInterface {
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
+            {
+                return HttpResponse::fromBody((string)json_encode(['artists' => []]));
+            }
+        };
+        $sleeper = static function (int $ms) use (&$waits): void {
+            $waits[] = $ms;
+        };
+
+        $a = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 1000, null, $sleeper);
+        $b = new MusicBrainzApi($httpClient, 'Test/1.0 (test@example.com)', 1000, null, $sleeper);
+        $a->searchArtists('one');
+        $b->searchArtists('two');
+        $a->searchArtists('three');
+
+        $this->assertCount(2, $waits, 'First entrant dispatches immediately');
+        $this->assertEqualsWithDelta(1000, $waits[0], 50);
+        $this->assertEqualsWithDelta(2000, $waits[1], 50);
+        $this->assertGreaterThan($waits[0] + 900, $waits[1], 'Entrants must stack, never co-fire');
+    }
+
+    /**
      * M-MUSICBRAINZ-32: the previous version of this test used a mock that
      * THREW on limit>100 — but MusicBrainzApi::get() swallows every
      * Throwable and returns [] — so `assertSame([], $result)` held even if
