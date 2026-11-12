@@ -231,6 +231,14 @@ final class MetadataEnricher
     /**
      * Select the best recording from search results.
      *
+     * Every decoded row is eligible: a non-empty result list always yields a
+     * recording. The first row seeds the pick unconditionally, and a later row
+     * replaces it only on a strictly higher boosted score (ties keep the
+     * earlier, i.e. MusicBrainz-ranked, row). A `score` of 0 — or an absent or
+     * non-numeric `score`, which reads as 0 — is therefore NOT a refusal: with
+     * no boost anywhere the API's own top row is returned rather than null
+     * (MBS-16; the former `> 0` seed silently dropped an all-zero page).
+     *
      * @param list<array<array-key, mixed>> $results
      *
      * @return array<array-key, mixed>|null
@@ -242,11 +250,11 @@ final class MetadataEnricher
         ?int $duration
     ): ?array {
         $best = null;
-        $bestScore = 0;
+        $bestScore = 0.0;
 
         foreach ($results as $recording) {
             $rawScore = $recording['score'] ?? 0;
-            $score = is_numeric($rawScore) ? (float)$rawScore : 0;
+            $score = is_numeric($rawScore) ? (float)$rawScore : 0.0;
 
             // Boost score if artist matches
             if ($artist !== null) {
@@ -268,7 +276,7 @@ final class MetadataEnricher
                 }
             }
 
-            if ($score > $bestScore) {
+            if ($best === null || $score > $bestScore) {
                 $bestScore = $score;
                 $best = $recording;
             }
