@@ -66,6 +66,9 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
      */
     private const MUSIC_TYPES = ['track', 'album', 'music', 'audio'];
 
+    /** Codepoint cap for file/operator-derived strings written to the log. */
+    private const LOG_VALUE_MAX_CHARS = 256;
+
     private ?ItemRepository $itemRepository = null;
     private LoggerInterface $logger;
     private MusicBrainzSettings $settings;
@@ -155,7 +158,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         $this->itemRepository = $itemRepo instanceof ItemRepository ? $itemRepo : null;
 
         $this->logger->info('MusicBrainz: plugin enabled', [
-            'user_agent' => $this->settings->userAgent,
+            'user_agent' => self::logSafe($this->settings->userAgent),
             'auto_enrich' => $this->settings->autoEnrich,
             'fetch_album_art' => $this->settings->fetchAlbumArt,
             'search_depth' => $this->settings->searchDepth,
@@ -310,7 +313,7 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
 
             $this->logger->info('MusicBrainz: enriched media item', [
                 'media_item_id' => $itemId,
-                'title' => $title,
+                'title' => self::logSafe($title),
                 'has_artist' => !empty($result->artistData),
                 'has_album' => !empty($result->albumData),
                 'has_tracks' => !empty($result->trackData),
@@ -372,6 +375,25 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
      * a TypeError. Non-conforming (or blank) values parse away to null —
      * enrichment then proceeds with whatever genuinely survives.
      */
+    /**
+     * Scrub a file-derived / operator-supplied string for the log sink:
+     * strip Cc/Cf (newline log-forging, bidi overrides) and cap codepoints.
+     */
+    private static function logSafe(string $value, int $cap = self::LOG_VALUE_MAX_CHARS): string
+    {
+        $scrubbed = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value);
+        if ($scrubbed === null) {
+            $scrubbed = preg_replace('/[\x00-\x1F\x7F]/', '', $value) ?? '';
+        }
+
+        $trimmed = trim($scrubbed);
+        if (preg_match('/^.{0,' . $cap . '}/u', $trimmed, $cut) === 1) {
+            return $cut[0];
+        }
+
+        return substr($trimmed, 0, $cap);
+    }
+
     private static function stringMeta(mixed $value): ?string
     {
         if (!is_string($value)) {
