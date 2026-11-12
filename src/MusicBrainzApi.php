@@ -1033,25 +1033,17 @@ final class MusicBrainzApi
     }
 
     /**
-     * Decode a JSON body into an object-shaped array, parsing away shapes
-     * the contract vocabulary cannot express (non-array payloads collapse
-     * to []). JSON object keys are always string or int after assoc decode,
-     * so the filtered result is honestly typed.
+     * Narrow a json_decode(..., true) result to an array: an array passes
+     * through unchanged, any other shape (scalar, null) collapses to [].
+     * No per-key filtering happens here — assoc decode already yields only
+     * string|int keys, so the array is returned as-is; row and field shape
+     * policing is the job of decodeRows() and the downstream parsers.
      *
      * @return array<array-key, mixed>
      */
     private static function decodeObject(mixed $decoded): array
     {
-        if (!is_array($decoded)) {
-            return [];
-        }
-
-        $object = [];
-        foreach ($decoded as $key => $value) {
-            $object[$key] = $value;
-        }
-
-        return $object;
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
