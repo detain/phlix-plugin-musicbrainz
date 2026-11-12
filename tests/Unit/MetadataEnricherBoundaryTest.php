@@ -116,7 +116,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
         $enricher = $this->enricher([
             '/recording' => (string)json_encode([
                 'recordings' => [[
-                    'id' => "rec-1\x02",
+                    'id' => "0fa4cb6d-5c36-4252-8bd4-94b0f2cf9715\x02",
                     'title' => "Ab\x1bc\x01def",
                     'length' => 180000,
                     'score' => 100,
@@ -131,7 +131,7 @@ final class MetadataEnricherBoundaryTest extends TestCase
 
         $result = $enricher->enrich('x');
 
-        $this->assertSame('rec-1', $result->trackData['mbid']);
+        $this->assertSame('0fa4cb6d-5c36-4252-8bd4-94b0f2cf9715', $result->trackData['mbid']);
         $this->assertSame('Abcdef', $result->trackData['title']);
         $this->assertSame('ArtistName', $result->trackData['artist_name']);
         $this->assertSame('USRC12345678', $result->trackData['isrc']);
@@ -139,6 +139,29 @@ final class MetadataEnricherBoundaryTest extends TestCase
         // carries the unit; the unit-blind 'duration' name must be gone.
         $this->assertSame(180000, $result->trackData['duration_ms']);
         $this->assertArrayNotHasKey('duration', $result->trackData);
+    }
+
+    public function testNonUuidResponseEchoedMbidsPersistAsNull(): void
+    {
+        $urls = [];
+        $enricher = $this->enricher([
+            '/recording' => (string)json_encode([
+                'recordings' => [[
+                    'id' => '../../evil?x=1',
+                    'title' => 'T',
+                    'score' => 100,
+                    'artist-credit' => [
+                        ['name' => 'A', 'artist' => ['id' => 'not-a-uuid']],
+                    ],
+                    'releases' => [],
+                ]],
+            ]),
+        ], $urls);
+
+        $result = $enricher->enrich('x');
+
+        $this->assertNull($result->trackData['mbid']);
+        $this->assertNull($result->trackData['artist_mbid']);
     }
 
     public function testOversizedRemoteFieldsAreCapped(): void

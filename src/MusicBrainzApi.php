@@ -75,7 +75,7 @@ final class MusicBrainzApi
      * request path — slashes, query marks or fragments in a "supposed" id
      * rewrite the URL we dial. The format gate is the boundary law.
      */
-    private const MBID_PATTERN =
+    public const MBID_PATTERN =
         '#^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$#i';
 
     /** @var int Maximum concurrent requests per host (bounded limiter) */

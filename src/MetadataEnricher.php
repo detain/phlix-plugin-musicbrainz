@@ -305,7 +305,7 @@ final class MetadataEnricher
         $credits = self::artistCredits($recording);
 
         return [
-            'mbid' => self::strField($recording, 'id', 64),
+            'mbid' => self::mbidField($recording, 'id'),
             'title' => self::strField($recording, 'title'),
             // M-MUSICBRAINZ-23: MusicBrainz `length` is MILLISECONDS while
             // the host's top-level `metadata.duration` is seconds. The key
@@ -315,7 +315,7 @@ final class MetadataEnricher
             'position' => self::intField($recording, 'position'),
             'number' => self::intField($recording, 'number'),
             'isrc' => self::strValue($isrcs[0] ?? null, 32),
-            'artist_mbid' => self::strField($creditArtist, 'id', 64),
+            'artist_mbid' => self::mbidField($creditArtist, 'id'),
             'artist_name' => self::strField($credit, 'name'),
             // M-MUSICBRAINZ-30: the full ordered credit (featured artists,
             // credited-as names, joinphrases), not just row [0]. The two
@@ -350,7 +350,7 @@ final class MetadataEnricher
             $artist = is_array($row['artist'] ?? null) ? $row['artist'] : [];
             $credits[] = [
                 'name' => self::strField($row, 'name'),
-                'mbid' => self::strField($artist, 'id', 64),
+                'mbid' => self::mbidField($artist, 'id'),
                 'joinphrase' => self::joinPhrase($row['joinphrase'] ?? null),
             ];
         }
@@ -462,7 +462,7 @@ final class MetadataEnricher
         $credits = self::artistCredits($release);
 
         return [
-            'mbid' => self::strField($release, 'id', 64),
+            'mbid' => self::mbidField($release, 'id'),
             'title' => self::strField($release, 'title'),
             'date' => self::strField($release, 'date', 32),
             'country' => self::strField($release, 'country', 16),
@@ -471,7 +471,7 @@ final class MetadataEnricher
             'catalog_number' => self::strField($labelInfo, 'catalog-number', 64),
             'media_format' => self::mediaFormat($release),
             'asin' => self::strField($release, 'asin', 32),
-            'artist_mbid' => self::strField($creditArtist, 'id', 64),
+            'artist_mbid' => self::mbidField($creditArtist, 'id'),
             'artist_name' => self::strField($credit, 'name'),
             // M-MUSICBRAINZ-30: full ordered credit on the release path too.
             'artist_credits' => $credits,
@@ -538,7 +538,7 @@ final class MetadataEnricher
         $endArea = is_array($artist['end-area'] ?? null) ? $artist['end-area'] : [];
 
         return [
-            'mbid' => self::strField($artist, 'id', 64),
+            'mbid' => self::mbidField($artist, 'id'),
             'name' => self::strField($artist, 'name'),
             'sort_name' => self::strField($artist, 'sort-name'),
             'type' => self::strField($artist, 'type', 64),
@@ -586,7 +586,7 @@ final class MetadataEnricher
 
         $first = reset($rows);
 
-        return is_array($first) ? self::strField($first, 'id', 64) : null;
+        return is_array($first) ? self::mbidField($first, 'id') : null;
     }
 
     /**
@@ -605,7 +605,7 @@ final class MetadataEnricher
 
         $artist = is_array($first['artist'] ?? null) ? $first['artist'] : [];
 
-        return self::strField($artist, 'id', 64);
+        return self::mbidField($artist, 'id');
     }
 
     /**
@@ -646,6 +646,21 @@ final class MetadataEnricher
     private static function strField(array $row, string $key, int $cap = 256): ?string
     {
         return self::strValue($row[$key] ?? null, $cap);
+    }
+
+    /**
+     * Parse a remote MBID field: the value must pass the canonical UUID
+     * shape gate (MusicBrainzApi::MBID_PATTERN) or it is junk and becomes
+     * null — a hostile response-echoed id is never persisted or fed back
+     * into a lookup.
+     *
+     * @param array<array-key, mixed> $row
+     */
+    private static function mbidField(array $row, string $key): ?string
+    {
+        $value = self::strField($row, $key, 64);
+
+        return $value !== null && preg_match(MusicBrainzApi::MBID_PATTERN, $value) === 1 ? $value : null;
     }
 
     /**
