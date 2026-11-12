@@ -24,7 +24,6 @@ namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClient;
 use Phlix\Plugin\MusicBrainz\HttpResponse;
-use ReflectionMethod;
 
 /**
  * Drives HttpClient::getAsync() — the leg a bare-CI runtime never selects —
@@ -131,12 +130,12 @@ final class HttpClientAsyncWaitTest extends TestCase
             }
         );
 
-        $method = new ReflectionMethod(HttpClient::class, 'getAsync');
-
-        return $method->invoke(
-            $httpClient,
+        // MBS-2: the fence lives in get(); an injected factory selects the
+        // async leg, so the whole path is exercised through the public API.
+        return $httpClient->get(
             $url,
             ['User-Agent' => 'phlix-async-test/1.0 (https://example.invalid/ua)'],
+            [],
             $options
         );
     }
@@ -156,10 +155,10 @@ final class HttpClientAsyncWaitTest extends TestCase
 
         $following = $this->scriptClient('respond', $this->makeResponse());
         $this->getAsync($following, 'https://coverartarchive.org/release/mbid-1b', []);
-        $this->assertArrayNotHasKey(
-            'allow_redirects',
-            $following->dials[0]['options'],
-            'The metadata leg keeps the library default (auto-follow bounded by its own config).'
+        $this->assertSame(
+            ['max' => 0],
+            $following->dials[0]['options']['allow_redirects'] ?? null,
+            'MBS-2: the library never auto-follows; get() re-gates every hop itself.'
         );
     }
 
@@ -307,6 +306,69 @@ final class HttpClientAsyncWaitTest extends TestCase
 
             $this->assertCount(1, $client->dials, "Legit service target must still dial: {$url}.");
             $this->assertSame(200, $result->status);
+        }
+    }
+
+    public function testAsyncRedirectHopIsRegatedBeforeItIsDialed(): void
+    {
+        $dials = [];
+        $factory = static function (array $config) use (&$dials): object {
+            return new class ($dials) {
+                /** @param list<string> $dials */
+                public function __construct(private array &$dials)
+                {
+                }
+
+                /** @param array<string, mixed> $options */
+                public function request(string $url, array $options = []): void
+                {
+                    $this->dials[] = $url;
+                    $loc = $url === 'https://musicbrainz.org/a' ? 'https://evil.example/x' : '';
+                    $headers = $loc === '' ? [] : ['Location' => $loc];
+                    $status = $loc === '' ? 200 : 302;
+                    $response = new class ($status, $headers) {
+                        /** @param array<string, string> $h */
+                        public function __construct(private int $s, private array $h)
+                        {
+                        }
+
+                        public function getStatusCode(): int
+                        {
+                            return $this->s;
+                        }
+
+                        public function getBody(): string
+                        {
+                            return '';
+                        }
+
+                        public function getHeaderLine(string $n): string
+                        {
+                            return $this->h[ucfirst($n)] ?? '';
+                        }
+                    };
+                    ($options['success'])($response);
+                }
+            };
+        };
+
+        $client = new HttpClient(5, $factory, static function (int $us): void {
+            unset($us);
+        });
+        $result = $client->get('https://musicbrainz.org/a');
+
+        $this->assertSame(['https://musicbrainz.org/a'], $dials, 'An off-allowlist hop must never be dialed.');
+        $this->assertSame(302, $result->status, 'The completed 3xx is handed back.');
+    }
+
+    public function testBlockingLegAppliesTheSameFenceWithoutDialing(): void
+    {
+        // No Workerman runtime here, so default construction is the blocking
+        // transport. Fixture posture is OFF: loopback/off-list never dial.
+        $client = new HttpClient(1);
+        foreach (['http://127.0.0.1:9/x', 'https://evil.example/', 'http://musicbrainz.org/x', 'file:///etc/passwd'] as $url) {
+            $result = $client->get($url);
+            $this->assertNull($result->status, "Blocking leg must refuse: {$url}");
         }
     }
 }

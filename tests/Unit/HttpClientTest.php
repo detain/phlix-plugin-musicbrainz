@@ -98,19 +98,19 @@ final class HttpClientTest extends TestCase
 
     public function testConstructorSetsTimeout(): void
     {
-        $client = new HttpClient(30);
+        $client = new HttpClient(30, null, null, true);
         $this->assertInstanceOf(HttpClient::class, $client);
     }
 
     public function testConstructorDefaultTimeout(): void
     {
-        $client = new HttpClient();
+        $client = new HttpClient(15, null, null, true);
         $this->assertInstanceOf(HttpClient::class, $client);
     }
 
     public function testGetWithNoQueryParameters(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/get'));
 
         $this->assertSame(200, $result->status);
@@ -122,7 +122,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetWithQueryParameters(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/get'), [], ['foo' => 'bar', 'baz' => 'qux']);
 
         $this->assertSame(200, $result->status);
@@ -136,7 +136,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetWithHeaders(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/headers'), [
             'X-Custom-Header' => 'TestValue',
         ]);
@@ -161,7 +161,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetReturnsNullOn404(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/status/404'));
 
         $this->assertSame(404, $result->status);
@@ -170,7 +170,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetReturnsNullOn500(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/status/500'));
 
         $this->assertSame(500, $result->status);
@@ -179,7 +179,7 @@ final class HttpClientTest extends TestCase
 
     public function testEtagSurfacedAndConditionalGetReturns304(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/etag'));
 
         $this->assertSame(200, $result->status);
@@ -193,7 +193,7 @@ final class HttpClientTest extends TestCase
 
     public function testFileUrlIsRejectedByProtocolPinning(): void
     {
-        $client = new HttpClient(5);
+        $client = new HttpClient(5, null, null, true);
         $result = $client->get('file:///etc/passwd');
 
         $this->assertNull($result->status);
@@ -203,7 +203,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetReturnsNullForUnresolvableHost(): void
     {
-        $client = new HttpClient(5);
+        $client = new HttpClient(5, null, null, true);
         $result = $client->get('https://this-domain-does-not-exist-12345.com/');
 
         $this->assertNull($result->status);
@@ -212,7 +212,7 @@ final class HttpClientTest extends TestCase
 
     public function testGetReturnsNullOnConnectionRefused(): void
     {
-        $client = new HttpClient(5);
+        $client = new HttpClient(5, null, null, true);
         $result = $client->get('http://127.0.0.1:59999/');
 
         $this->assertNull($result->status);
@@ -224,7 +224,7 @@ final class HttpClientTest extends TestCase
         // The cover-art walk asks for this fence: a 3xx must come back as a
         // completed exchange carrying its Location, never be silently
         // followed inside the transport.
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/redirect'), [], [], ['followRedirects' => false]);
 
         $this->assertSame(302, $result->status);
@@ -238,7 +238,7 @@ final class HttpClientTest extends TestCase
         // HTTPS: on this http fixture the follow attempt must ABORT at the
         // redirect hop (the 302 code survives as the last received one and
         // the /final body is never delivered).
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/redirect'));
 
         $this->assertSame(302, $result->status);
@@ -258,7 +258,7 @@ final class HttpClientTest extends TestCase
         // fault, but the destroyed transfer shows exactly in the body
         // (string "" vs null). The cover-art walk consumes the completed
         // 302 to re-gate the hop itself.
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(
             self::endpoint('/redirect-dead-https'),
             [],
@@ -277,7 +277,7 @@ final class HttpClientTest extends TestCase
 
     public function testMaxResponseBytesAbortsBeforeBufferingTheBody(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/bytes/262144'), [], [], ['maxResponseBytes' => 4096]);
 
         $this->assertTrue($result->isTooLarge(), 'A declared body past the byte budget must abort pre-buffer.');
@@ -286,7 +286,7 @@ final class HttpClientTest extends TestCase
 
     public function testBodyWithinByteBudgetIsDeliveredIntact(): void
     {
-        $client = new HttpClient(10);
+        $client = new HttpClient(10, null, null, true);
         $result = $client->get(self::endpoint('/bytes/2048'), [], [], ['maxResponseBytes' => 4096]);
 
         $this->assertSame(200, $result->status);
@@ -297,7 +297,7 @@ final class HttpClientTest extends TestCase
     {
         // Declared last: the single-threaded built-in server spends the
         // router's 2s sleep finishing this request; nothing queues behind it.
-        $client = new HttpClient(1);
+        $client = new HttpClient(1, null, null, true);
         $result = $client->get(self::endpoint('/delay/2'));
 
         $this->assertNull($result->status);

@@ -28,6 +28,10 @@ namespace Phlix\Plugin\MusicBrainz;
  * `php -S` fixture server (tests/Fixture/transport_router.php) — the suite
  * never dials an external host.
  *
+ * Trust fence (MBS-2): get() gates every dialed URL for both transports —
+ * https, no userinfo, service hosts only — and follows redirects itself,
+ * re-gating each hop.
+ *
  * @package Phlix\Plugin\MusicBrainz
  */
 final class HttpClient implements HttpClientInterface
@@ -53,17 +57,34 @@ final class HttpClient implements HttpClientInterface
     private $asyncWaitSleeper;
 
     /**
+     * True when the async factory was injected explicitly (test seam): the
+     * cooperative leg is then selected without a resident Workerman runtime.
+     */
+    private bool $asyncSeamInjected;
+
+    /**
+     * Fixture-only posture: also permit cleartext http to a loopback host
+     * (the `php -S` transport fixtures). Production never sets it.
+     */
+    private bool $allowLoopbackHttp;
+
+    /**
      * @param (callable(array<string, int>): object)|null $asyncClientFactory
      *   Test seam for the async transport; production passes nothing.
      * @param (callable(int): void)|null $asyncWaitSleeper
      *   Test seam for the cooperative wait sleep; production passes nothing.
+     * @param bool $allowLoopbackHttp
+     *   Test seam: admit http://127.0.0.1 / localhost / [::1] fixture targets.
      */
     public function __construct(
         int $timeout = 15,
         ?callable $asyncClientFactory = null,
-        ?callable $asyncWaitSleeper = null
+        ?callable $asyncWaitSleeper = null,
+        bool $allowLoopbackHttp = false
     ) {
         $this->timeout = $timeout;
+        $this->asyncSeamInjected = $asyncClientFactory !== null;
+        $this->allowLoopbackHttp = $allowLoopbackHttp;
         $this->asyncClientFactory = $asyncClientFactory
             ?? static fn (array $config): object => new \Workerman\Http\Client($config);
         $this->asyncWaitSleeper = $asyncWaitSleeper
@@ -81,44 +102,98 @@ final class HttpClient implements HttpClientInterface
             $url .= '?' . http_build_query($query);
         }
 
-        if (class_exists(\Workerman\Http\Client::class)) {
-            return $this->getAsync($url, $headers, $options);
+        // MBS-2: the host/scheme fence is transport-independent — it gates
+        // every URL either transport dials, the initial target and every
+        // redirect hop alike. Neither transport auto-follows: each dials
+        // with redirects disabled and this loop re-gates each Location.
+        if (!$this->isAllowedTarget($url, false)) {
+            return HttpResponse::failure();
         }
 
-        return $this->getBlocking($url, $headers, $options);
+        $follow = self::followsRedirects($options);
+        $async = $this->asyncSeamInjected || class_exists(\Workerman\Http\Client::class);
+        $hops = 0;
+
+        while (true) {
+            $response = $async
+                ? $this->getAsync($url, $headers, $options)
+                : $this->getBlocking($url, $headers, $options);
+
+            $status = $response->status;
+            if (!$follow || $status === null || $status < 300 || $status >= 400) {
+                return $response;
+            }
+
+            $location = $response->headers['location'] ?? '';
+            if ($location === '' || $hops >= self::MAX_REDIRECT_HOPS) {
+                return $response;
+            }
+
+            $next = self::resolveLocation($url, $location);
+            // Hops are https-only even in fixture posture: a network-supplied
+            // Location may never downgrade the exchange. A refused hop hands
+            // the completed 3xx back, undialed.
+            if ($next === null || !$this->isAllowedTarget($next, true)) {
+                return $response;
+            }
+
+            $url = $next;
+            $hops++;
+        }
+    }
+
+    private const MAX_REDIRECT_HOPS = 3;
+
+    /**
+     * Resolve a Location against the current URL: absolute, protocol-relative
+     * or path-absolute. Anything else (path-relative, unparseable) is null.
+     */
+    private static function resolveLocation(string $base, string $location): ?string
+    {
+        if (preg_match('#^[a-z][a-z0-9+.-]*://#i', $location) === 1) {
+            return $location;
+        }
+
+        $parts = parse_url($base);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            return null;
+        }
+
+        if (str_starts_with($location, '//')) {
+            return $parts['scheme'] . ':' . $location;
+        }
+
+        if (str_starts_with($location, '/')) {
+            $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+            return $parts['scheme'] . '://' . $parts['host'] . $port . $location;
+        }
+
+        return null;
     }
 
     /**
      * Non-blocking GET via workerman/http-client with a cooperative wait.
      *
-     * Redirect fence: the library follows redirects per-request through its
-     * `allow_redirects` option (default max 3); `max => 0` makes it hand the
-     * 3xx itself to the success callback, which is exactly the fence the
-     * cover-art walk requires. The library has no body-size option, so an
+     * Redirect fence: `allow_redirects => ['max' => 0]` always makes the
+     * library hand the 3xx itself to the success callback; get() follows
+     * (when asked) hop by hop, re-gating every Location. The library has no body-size option, so an
      * async `maxResponseBytes` budget is enforced from the Content-Length
      * hint first and from the converted body length second — a hostile
      * endpoint can still make the library buffer one response before the
      * refusal fires (the blocking fallback aborts mid-transfer).
      *
-     * Host fence (M-MUSICBRAINZ-41): the library dials whatever URL it is
-     * handed, so the boundary law the blocking path gets from curl options
-     * (PROTOCOLS/REDIR_PROTOCOLS, https-only) lives here as an explicit
-     * check — https scheme, no userinfo, and only the two service hosts
-     * this plugin speaks to (exact or true subdomain). A refused target
-     * returns the transport-failure shape WITHOUT dialing; the API layer's
-     * loud transport warning (M-MUSICBRAINZ-38) makes refusals visible
-     * rather than silently indistinguishable from a miss.
+     * Host fence (M-MUSICBRAINZ-41, hoisted by MBS-2): enforced in get()
+     * for BOTH transports — see {@see self::isAllowedTarget()}. A refused
+     * target returns the transport-failure shape WITHOUT dialing; the API
+     * layer's loud transport warning (M-MUSICBRAINZ-38) makes refusals
+     * visible rather than silently indistinguishable from a miss.
      *
      * @param array<string, string> $headers
      * @param array<string, mixed> $options
      */
     private function getAsync(string $url, array $headers, array $options): HttpResponse
     {
-        if (!self::isAllowedAsyncTarget($url)) {
-            return HttpResponse::failure();
-        }
-
-        $followRedirects = self::followsRedirects($options);
         $maxResponseBytes = self::responseBudget($options);
 
         /**
@@ -129,13 +204,13 @@ final class HttpClient implements HttpClientInterface
          */
         $state = ['done' => false, 'abandoned' => false, 'response' => HttpResponse::failure()];
 
+        // Redirects are never followed inside the library: get() re-gates
+        // every hop, so the library hands each 3xx back (max => 0).
         $request = [
             'method' => 'GET',
             'headers' => $headers,
+            'allow_redirects' => ['max' => 0],
         ];
-        if ($followRedirects === false) {
-            $request['allow_redirects'] = ['max' => 0];
-        }
 
         /** @var \Workerman\Http\Client $client */
         $client = ($this->asyncClientFactory)(['timeout' => $this->timeout]);
@@ -243,27 +318,26 @@ final class HttpClient implements HttpClientInterface
     }
 
     /**
-     * The async transport's trust set (M-MUSICBRAINZ-41): the two services
+     * The transport trust set (M-MUSICBRAINZ-41, MBS-2): the two services
      * this plugin speaks to. Subdomains are inside the trust (Cover Art
      * Archive serves images from cover subdomains — the redirect-walk suite
      * pins such a hop as legit); lookalike suffixes are not.
      *
      * @var list<string>
      */
-    private const ALLOWED_ASYNC_HOSTS = ['musicbrainz.org', 'coverartarchive.org'];
+    private const ALLOWED_HOSTS = ['musicbrainz.org', 'coverartarchive.org'];
 
     /**
-     * Parse an async dial target into "may we touch the network for this"
-     * (M-MUSICBRAINZ-41): https only, no userinfo in any position, host
-     * exactly on the trust set or a true subdomain of it. An unparseable
-     * URL is illegal, not merely unknown — refuse. Mirrors the curl
-     * PROTOCOLS/REDIR_PROTOCOLS law the blocking fallback gets from libcurl
-     * options, which the async library has no equivalent of.
+     * Parse a dial target into "may we touch the network for this": https
+     * only, no userinfo in any position, host exactly on the trust set or a
+     * true subdomain of it. An unparseable URL is illegal — refuse. In the
+     * fixture posture ($allowLoopbackHttp, never production) an initial
+     * (non-hop) target may additionally be http to a loopback host.
      */
-    private static function isAllowedAsyncTarget(string $url): bool
+    private function isAllowedTarget(string $url, bool $isHop): bool
     {
         $parts = parse_url($url);
-        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https') {
+        if (!is_array($parts)) {
             return false;
         }
 
@@ -271,12 +345,26 @@ final class HttpClient implements HttpClientInterface
             return false;
         }
 
+        $scheme = $parts['scheme'] ?? '';
         $host = strtolower($parts['host'] ?? '');
         if ($host === '') {
             return false;
         }
 
-        foreach (self::ALLOWED_ASYNC_HOSTS as $allowed) {
+        if (
+            !$isHop
+            && $this->allowLoopbackHttp
+            && in_array($scheme, ['http', 'https'], true)
+            && in_array($host, ['127.0.0.1', 'localhost', '[::1]'], true)
+        ) {
+            return true;
+        }
+
+        if ($scheme !== 'https') {
+            return false;
+        }
+
+        foreach (self::ALLOWED_HOSTS as $allowed) {
             if ($host === $allowed || str_ends_with($host, '.' . $allowed)) {
                 return true;
             }
@@ -325,7 +413,6 @@ final class HttpClient implements HttpClientInterface
         }
         unset($headers['User-Agent']);
 
-        $followRedirects = self::followsRedirects($options);
         $maxResponseBytes = self::responseBudget($options);
 
         $body = '';
@@ -342,9 +429,9 @@ final class HttpClient implements HttpClientInterface
             // rides this floor too).
             CURLOPT_PROTOCOLS => CURLPROTO_HTTPS | CURLPROTO_HTTP,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
-            CURLOPT_FOLLOWLOCATION => $followRedirects,
-            CURLOPT_MAXREDIRS => 3,
-            CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
+            // get() follows hop by hop and re-gates each Location (MBS-2).
+            CURLOPT_FOLLOWLOCATION => false,
+                        CURLOPT_HTTPHEADER => $this->buildHeaders($headers),
             CURLOPT_USERAGENT => $userAgent,
             CURLOPT_HEADERFUNCTION => static function ($handle, string $header) use (&$responseHeaders): int {
                 $line = trim($header);

@@ -154,7 +154,7 @@ final class MusicBrainzUserAgentTest extends TestCase
 
     public function testBlockingTransportFallsBackToCanonicalConstantWhenHeaderBlank(): void
     {
-        $response = (new HttpClient())
+        $response = (new HttpClient(15, null, null, true))
             ->get('http://127.0.0.1:' . self::$port . '/headers', ['User-Agent' => '']);
 
         $headers = json_decode((string)$response->body, true)['headers'] ?? [];
@@ -164,7 +164,7 @@ final class MusicBrainzUserAgentTest extends TestCase
     public function testBlockingTransportSendsSuppliedUserAgentVerbatim(): void
     {
         $supplied = 'OperatorFork/3.2 (https://example.org/contact)';
-        $response = (new HttpClient())
+        $response = (new HttpClient(15, null, null, true))
             ->get('http://127.0.0.1:' . self::$port . '/headers', ['User-Agent' => $supplied]);
 
         $headers = json_decode((string)$response->body, true)['headers'] ?? [];
