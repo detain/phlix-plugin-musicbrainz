@@ -702,11 +702,21 @@ final class MusicBrainzApi
      *
      * @return string|null Base64-encoded image data, or null when the
      *   release has no art, the archive fetch failed (see
-     *   {@see getCoverArt()}, M-MUSICBRAINZ-04) or the image URL was
-     *   refused by the host allowlist.
+     *   {@see getCoverArt()}, M-MUSICBRAINZ-04), the image URL was
+     *   refused by the host allowlist, or the release MBID failed the
+     *   shape gate (MBS-5: refused before the memo is touched).
      */
     public function getFrontCover(string $releaseMbid): ?string
     {
+        // MBS-5: the MBID shape gate runs at the ENTRY, before the memo is
+        // read or written. Gated only downstream (inside getCoverArt()), a
+        // junk key still resolved to null and was then memoized under the
+        // raw value — a stream of malformed ids would churn the 4-slot FIFO
+        // and evict real art. A format refusal is never a memo verdict.
+        if (!$this->acceptMbid('cover-art-release', $releaseMbid)) {
+            return null;
+        }
+
         $entry = self::$coverMemo[$releaseMbid] ?? null;
         if ($entry !== null) {
             if ($entry['expiresAtHrMs'] === null || $entry['expiresAtHrMs'] > self::monotonicMs()) {

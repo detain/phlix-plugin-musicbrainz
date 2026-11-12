@@ -87,6 +87,57 @@ final class MusicBrainzMbidGateTest extends TestCase
         $this->assertNull($api->getFrontCover($mbid));
     }
 
+    /**
+     * MBS-5: junk keys must never touch the cover memo. Pre-gate, a
+     * malformed id resolved to null downstream (getCoverArt() refused it)
+     * and that null was then memoized under the raw key — five junk ids
+     * were enough to evict real art from the 4-slot FIFO.
+     */
+    public function testMalformedMbidsCannotChurnTheCoverMemo(): void
+    {
+        $client = new class () implements HttpClientInterface {
+            /** @var list<string> */
+            public array $dialed = [];
+
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
+            {
+                if (preg_match('#^https://coverartarchive\.org/release/([0-9a-f-]{36})$#', $url) !== 1) {
+                    if (!str_starts_with($url, 'https://covers.coverartarchive.org/i/')) {
+                        throw new RuntimeException('unexpected dial: ' . $url);
+                    }
+                    $this->dialed[] = $url;
+
+                    return HttpResponse::fromBody('ART');
+                }
+                $this->dialed[] = $url;
+
+                return HttpResponse::fromBody(json_encode([
+                    'images' => [['front' => true, 'image' => 'https://covers.coverartarchive.org/i/front']],
+                ]) ?: '');
+            }
+        };
+
+        $api = new MusicBrainzApi($client, 'PhlixTest/1.0 (https://example.com/contact)', 0);
+
+        $this->assertSame(base64_encode('ART'), $api->getFrontCover(self::RELEASE_MBID));
+        $this->assertCount(2, $client->dialed, 'listing + image for the real release');
+
+        foreach (self::provideMalformedMbids() as [$junk]) {
+            $this->assertNull($api->getFrontCover($junk));
+        }
+
+        $memo = (new \ReflectionProperty(MusicBrainzApi::class, 'coverMemo'))->getValue();
+        $this->assertIsArray($memo);
+        $this->assertSame(
+            [self::RELEASE_MBID],
+            array_keys($memo),
+            'A format refusal is never a memo verdict: no junk key may be written, none may evict real art.'
+        );
+
+        $this->assertSame(base64_encode('ART'), $api->getFrontCover(self::RELEASE_MBID));
+        $this->assertCount(2, $client->dialed, 'The real release must still be served from the memo, not re-dialed.');
+    }
+
     public function testWellFormedArtistMbidStillDials(): void
     {
         $client = new class (self::ARTIST_MBID) implements HttpClientInterface {
