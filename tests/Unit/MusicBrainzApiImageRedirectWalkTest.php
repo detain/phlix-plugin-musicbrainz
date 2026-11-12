@@ -305,6 +305,41 @@ final class MusicBrainzApiImageRedirectWalkTest extends TestCase
             static fn (array $r): bool => str_contains($r['message'], 'oversized')
         ));
         $this->assertNotEmpty($refused, 'A size-aborted image fetch must leave a refusal log line.');
+        // MBS-24: the transport-abort leg names itself, distinct from the
+        // delivered-over-budget belt below.
+        $this->assertCount(1, $refused);
+        $this->assertStringContainsString('transport size abort', $refused[0]['message']);
+        $this->assertStringNotContainsString('delivered over budget', $refused[0]['message']);
+        $this->assertSame(self::FENCE['maxResponseBytes'], $refused[0]['context']['cap']);
+    }
+
+    /**
+     * MBS-24: a transport that ignores the byte budget and hands back an
+     * over-cap body anyway is refused by the belt — and that refusal line
+     * must be distinguishable from the transport-abort line, carrying the
+     * received byte count and the hop it came from.
+     */
+    public function testOverBudgetImageBodyDeliveredAnywayIsRefusedWithDistinctLog(): void
+    {
+        $logger = $this->recordingLogger();
+        $cap = self::FENCE['maxResponseBytes'];
+        $harness = $this->harness([
+            self::IMAGE => HttpResponse::fromBody(str_repeat('x', $cap + 1)),
+        ], $logger);
+
+        $this->assertNull($harness->api->getFrontCover(self::MBID));
+
+        $refused = array_values(array_filter(
+            $logger->records,
+            static fn (array $r): bool => str_contains($r['message'], 'oversized')
+        ));
+        $this->assertCount(1, $refused);
+        $this->assertSame('warning', $refused[0]['level']);
+        $this->assertStringContainsString('delivered over budget', $refused[0]['message']);
+        $this->assertStringNotContainsString('transport size abort', $refused[0]['message']);
+        $this->assertSame($cap + 1, $refused[0]['context']['bytes']);
+        $this->assertSame($cap, $refused[0]['context']['cap']);
+        $this->assertSame(self::IMAGE, $refused[0]['context']['url']);
     }
 
     /**

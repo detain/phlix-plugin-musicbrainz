@@ -872,7 +872,11 @@ final class MusicBrainzApi
             }
 
             if ($response->isTooLarge()) {
-                $this->logger->warning('MusicBrainz: refused oversized cover image response', [
+                // MBS-24: the transport refused the exchange (declared length or
+                // streamed bytes past the budget) — no body was ever delivered.
+                // Wording mirrors the JSON pair so the two refusal legs stay
+                // distinguishable in a log sink.
+                $this->logger->warning('MusicBrainz: refused oversized cover image response (transport size abort)', [
                     'url' => self::logSafe($current),
                     'cap' => self::MAX_IMAGE_RESPONSE_BYTES,
                 ]);
@@ -903,7 +907,8 @@ final class MusicBrainzApi
             // already enforces the same budget; this belt covers transports
             // that deliver an over-budget body anyway.
             if (strlen($response->body) > self::MAX_IMAGE_RESPONSE_BYTES) {
-                $this->logger->warning('MusicBrainz: refused oversized cover image body', [
+                $this->logger->warning('MusicBrainz: refused oversized cover image body (delivered over budget)', [
+                    'url' => self::logSafe($current),
                     'bytes' => strlen($response->body),
                     'cap' => self::MAX_IMAGE_RESPONSE_BYTES,
                 ]);
