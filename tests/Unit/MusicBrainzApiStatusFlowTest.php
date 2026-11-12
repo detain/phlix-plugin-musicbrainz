@@ -153,6 +153,58 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
         $this->assertLessThan(4300, $slept[0], 'Backoff level must have reset to 1 after the success.');
     }
 
+    /**
+     * MBS-12: a transport failure (status === null) is not a server answer,
+     * so it must neither close the open park window nor reset the
+     * escalation level. 503 -> failure -> 503 keeps climbing to level 2.
+     */
+    public function testTransportFailureKeepsBackoffWindowAndLevel(): void
+    {
+        $test = $this;
+        $client = new class ($test) implements HttpClientInterface {
+            public function __construct(private object $test)
+            {
+            }
+
+            public function get(string $url, array $headers = [], array $query = [], array $options = []): HttpResponse
+            {
+                $n = count($this->test->calls) + 1;
+                $this->test->calls[] = ['url' => $url, 'headers' => $headers];
+
+                return match ($n) {
+                    1, 3 => new HttpResponse(503, null),
+                    2 => HttpResponse::failure(),
+                    default => HttpResponse::fromBody('{"artists":[]}'),
+                };
+            }
+        };
+
+        $slept = [];
+        $api = new MusicBrainzApi($client, 'PhlixTest/1.0 (https://example.com/contact)', 1100, null,
+            static function (int $ms) use (&$slept): void {
+                $slept[] = $ms;
+            });
+
+        $api->searchArtists('x');   // 503 -> level1 park >= 2200
+        $api->searchArtists('x');   // pays >= 2200; transport failure -> no change
+        $api->searchArtists('x');   // window still open -> pays it again; 503 -> level2
+        $api->searchArtists('x');   // pays >= 4400 (level 2, not a restart at level 1)
+
+        $this->assertCount(3, $slept);
+        $this->assertGreaterThanOrEqual(2190, $slept[0]);
+        $this->assertGreaterThan(
+            1100,
+            $slept[1],
+            'A transport failure must not close the park window (only plain pacing would remain).'
+        );
+        $this->assertGreaterThanOrEqual(
+            4390,
+            $slept[2],
+            'A transport failure must not reset escalation: the next 503 is level 2.'
+        );
+        $this->assertLessThanOrEqual(60000, $slept[2]);
+    }
+
     public function testNotFoundIsMemoizedButTransportFailureIsNot(): void
     {
         $api = $this->api(static function (int $n, string $url): HttpResponse {

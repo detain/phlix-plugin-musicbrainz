@@ -480,12 +480,22 @@ final class MusicBrainzApi
      *
      * A 429/503 raises the escalation level (bounded), and the caller-facing
      * park window becomes max(delay * 2^level, Retry-After) capped at
-     * MAX_BACKOFF_MS. Any non-rate-limited exchange (success, 404, even a
-     * transport failure) resets the escalation — the server told us to slow
-     * down, and we are no longer being told that.
+     * MAX_BACKOFF_MS. Any non-rate-limited response the server actually
+     * answered (success, 404, 5xx other than 503) resets the escalation —
+     * the server told us to slow down, and we are no longer being told that.
+     *
+     * A transport failure (status === null: DNS/connect/timeout, or a fence
+     * refusal) carries no signal from the server at all, so it neither
+     * escalates nor resets (MBS-12): a 429 -> timeout -> 429 sequence keeps
+     * climbing instead of restarting at level 1, and an open park window is
+     * still honoured by the next request.
      */
     private function observeRateSignals(HttpResponse $response): void
     {
+        if ($response->status === null) {
+            return;
+        }
+
         if (!$response->isRateLimited()) {
             self::$backoffLevel = 0;
             self::$backoffUntilHrMs = null;
