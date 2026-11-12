@@ -212,4 +212,23 @@ final class MusicBrainzUserAgentTest extends TestCase
         $clean = 'MyFork/2.0 https://x.example/phlix';
         $this->assertSame($clean, MusicBrainzSettings::fromArray(['user_agent' => $clean])->userAgent);
     }
+
+    public function testUserAgentAtCapIsAcceptedAndOverCapFallsBack(): void
+    {
+        $prefix = 'F/1 https://x.example ';
+        $atCap = $prefix . str_repeat('a', MusicBrainzSettings::MAX_USER_AGENT_LENGTH - strlen($prefix));
+        $this->assertSame($atCap, MusicBrainzSettings::fromArray(['user_agent' => $atCap])->userAgent);
+
+        $multibyteAtCap = $prefix . str_repeat("\u{00E9}", MusicBrainzSettings::MAX_USER_AGENT_LENGTH - strlen($prefix));
+        $this->assertSame(
+            $multibyteAtCap,
+            MusicBrainzSettings::fromArray(['user_agent' => $multibyteAtCap])->userAgent,
+            'The cap counts codepoints, not bytes.'
+        );
+
+        $this->assertSame(
+            MusicBrainzSettings::DEFAULT_USER_AGENT,
+            MusicBrainzSettings::fromArray(['user_agent' => $atCap . 'a'])->userAgent
+        );
+    }
 }

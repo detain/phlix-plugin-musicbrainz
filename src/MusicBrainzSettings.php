@@ -56,6 +56,14 @@ final class MusicBrainzSettings
     public const MAX_RATE_LIMIT_DELAY_MS = 60000;
 
     /**
+     * Ceiling for the User-Agent length, in codepoints (MBS-19): completes
+     * the parse-don't-validate boundary alongside isHeaderSafe — an absurdly
+     * long value is refused whole to the safe default, never shipped as an
+     * oversized header or persisted unbounded.
+     */
+    public const MAX_USER_AGENT_LENGTH = 512;
+
+    /**
      * The exact field set the SPA projection exposes (M-MUSICBRAINZ-36): a
      * future persistence field stays OUT of the SPA payload until it is
      * declared here. The projection is derived over this list from
@@ -99,7 +107,11 @@ final class MusicBrainzSettings
         // string is never a legitimate identification anyway. Reject the
         // whole value to the safe default instead of shipping a broken
         // header (fail-safe: the gate law below still demands `://`).
-        $userAgent = $rawUserAgent !== '' && self::isHeaderSafe($rawUserAgent)
+        // MBS-19: also capped at MAX_USER_AGENT_LENGTH codepoints (over-length
+        // is refused whole, same as header-unsafe).
+        $userAgent = $rawUserAgent !== ''
+            && self::isHeaderSafe($rawUserAgent)
+            && mb_strlen($rawUserAgent, 'UTF-8') <= self::MAX_USER_AGENT_LENGTH
             ? $rawUserAgent
             : self::DEFAULT_USER_AGENT;
 
