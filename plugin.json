@@ -22,7 +22,7 @@
             "required": false,
             "tier": "advanced",
             "label": "User-Agent",
-            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). ENFORCED: enrichment only runs when the value contains a URL (the '://' substring) — an email-only UA fails the gate; the plugin silently declines to enqueue or enrich. Include a project/contact URL. Optional — the default is fine; customize if you run a fork.",
+            "description": "Identifies Phlix to MusicBrainz (their policy REQUIRES a descriptive User-Agent with contact info). ENFORCED: enrichment only runs when the value contains a URL (the '://' substring) — an email-only UA fails the gate; the plugin declines to enqueue or enrich and logs one warning. Include a project/contact URL. Optional — the default is fine; customize if you run a fork.",
             "link": "https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
             "link_text": "MusicBrainz API etiquette"
         },
@@ -32,7 +32,7 @@
             "required": false,
             "tier": "advanced",
             "label": "Rate-limit delay (ms)",
-            "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). Values below 1000 are raised to the 1000 ms ToS floor; values above 60000 are capped at the 60000 ms ceiling; non-integer or ≤0 values fall back to the 1100 default."
+            "description": "Minimum delay between MusicBrainz requests. Optional; default 1100 (MusicBrainz asks for no more than ~1 request/second). Values below 1000 are raised to the 1000 ms ToS floor; values above 60000 are capped at the 60000 ms ceiling; values that are not positive whole numbers fall back to the 1100 default."
         },
         "auto_enrich": {
             "type": "boolean",
@@ -40,7 +40,7 @@
             "required": false,
             "tier": "advanced",
             "label": "Auto-enrich",
-            "description": "Automatically enrich music items as they are scanned. Optional; default on."
+            "description": "Automatically enrich music items as they are scanned. Enrichment runs through a throttled queue (one item per rate-limit interval, up to 10000 waiting), so large scans fill in gradually. Optional; default on."
         },
         "fetch_album_art": {
             "type": "boolean",
@@ -56,7 +56,7 @@
             "required": false,
             "tier": "advanced",
             "label": "Search depth",
-            "description": "How hard to search for matches: fast, normal or deep. Optional; default normal."
+            "description": "How hard to search for matches: fast, normal or deep. Fast runs one recording search; normal also searches releases; deep also searches artists when none was found, costing extra requests. Optional; default normal."
         }
     }
 }

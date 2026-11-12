@@ -5,8 +5,8 @@ on:
     branches: [master, main]
   pull_request:
 
-# Least privilege (MBS-20): every job only checks out code; the dispatch job
-# authenticates with its own PHLIX_BOT_TOKEN secret, not GITHUB_TOKEN.
+# Least privilege (MBS-20): every job only checks out code and runs tests;
+# contents: read suffices.
 permissions:
   contents: read
 

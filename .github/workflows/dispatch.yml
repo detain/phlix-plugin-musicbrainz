@@ -6,8 +6,8 @@ on:
   release:
     types: [published]
 
-# Least privilege (MBS-20): every job only checks out code; the dispatch job
-# authenticates with its own PHLIX_BOT_TOKEN secret, not GITHUB_TOKEN.
+# Least privilege (MBS-20): the dispatch job authenticates with its own
+# PHLIX_BOT_TOKEN secret, not GITHUB_TOKEN.
 permissions:
   contents: read
 
