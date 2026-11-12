@@ -389,4 +389,94 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
         $memo = $property->getValue();
         $this->assertArrayNotHasKey($mbid, $memo, 'The over-ceiling blob must not sit in the memo.');
     }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function providePoisonedEtags(): array
+    {
+        return [
+            'CRLF header splice' => ["W/\"v1\"\r\nX-Injected: 1"],
+            'bare LF' => ["\"v1\"\n"],
+            'bare CR' => ["\"v1\"\r"],
+            'horizontal tab' => ["\"v\t1\""],
+            'DEL' => ["\"v\x7F1\""],
+            'C1 NEL (UTF-8 encoded)' => ["\"v\u{0085}1\""],
+            'malformed UTF-8' => ["\"v\xFF1\""],
+        ];
+    }
+
+    /**
+     * MBS-18 header-custody law, second path: a memoized ETag is re-gated
+     * before it is replayed as If-None-Match. A poisoned entry is rejected
+     * (no conditional header on the wire) AND dropped (the memo no longer
+     * holds it, so a 304 can never be served from its body).
+     *
+     * @dataProvider providePoisonedEtags
+     */
+    public function testPoisonedStoredEtagIsRejectedAndDroppedBeforeReplay(string $poisoned): void
+    {
+        $mbid = '14652a6d-3c79-cb58-72e1-29a99be739e4';
+        $body = '{"id":"' . $mbid . '","name":"Poisoned Artist"}';
+        $api = $this->api(static function (int $n) use ($body, $poisoned): HttpResponse {
+            if ($n === 1) {
+                return new HttpResponse(200, $body, ['etag' => $poisoned]);
+            }
+
+            return new HttpResponse(304, null);
+        });
+
+        $this->assertSame('Poisoned Artist', $api->getArtist($mbid)['name'] ?? null, 'First fetch serves normally.');
+
+        $store = new \ReflectionProperty(MusicBrainzApi::class, 'etagStore');
+        /** @var array<string, array{etag: string}> $before */
+        $before = $store->getValue();
+        $this->assertCount(1, $before, 'Fixture premise: the poisoned entry reached the memo.');
+
+        $second = $api->getArtist($mbid);
+
+        $this->assertCount(2, $this->calls);
+        $this->assertArrayNotHasKey(
+            'If-None-Match',
+            $this->calls[1]['headers'],
+            'A control-bearing or undecodable ETag must never be replayed as an outbound header.'
+        );
+        foreach ($this->calls[1]['headers'] as $value) {
+            $this->assertStringNotContainsString($poisoned, $value, 'No header may carry the poisoned bytes.');
+        }
+        $this->assertSame([], $store->getValue(), 'The poisoned memo entry must be dropped, not merely skipped.');
+        $this->assertNotSame(
+            'Poisoned Artist',
+            $second['name'] ?? null,
+            'With the entry dropped, a 304 cannot be served from the poisoned memo body.'
+        );
+    }
+
+    public function testNulBearingStoredEtagIsRejectedAndDropped(): void
+    {
+        // Built at runtime: PHPUnit data sets reject NUL bytes in fixtures.
+        $this->testPoisonedStoredEtagIsRejectedAndDroppedBeforeReplay('"v' . chr(0) . '1"');
+    }
+
+    public function testMemoHealsWithACleanEtagAfterAPoisonedEntryIsDropped(): void
+    {
+        // The drop is not a fossil: the unconditional re-fetch that replaces
+        // the poisoned entry memoizes its clean ETag, and revalidation resumes.
+        $mbid = '14652a6d-3c79-cb58-72e1-29a99be739e4';
+        $api = $this->api(static function (int $n) use ($mbid): HttpResponse {
+            return match ($n) {
+                1 => new HttpResponse(200, '{"id":"' . $mbid . '","name":"Old"}', ['etag' => "W/\"v1\"\r\nX: y"]),
+                2 => new HttpResponse(200, '{"id":"' . $mbid . '","name":"Fresh"}', ['etag' => 'W/"v2"']),
+                default => new HttpResponse(304, null),
+            };
+        });
+
+        $api->getArtist($mbid);
+        $this->assertSame('Fresh', $api->getArtist($mbid)['name'] ?? null);
+        $third = $api->getArtist($mbid);
+
+        $this->assertArrayNotHasKey('If-None-Match', $this->calls[1]['headers']);
+        $this->assertSame('W/"v2"', $this->calls[2]['headers']['If-None-Match'] ?? null, 'Clean ETags keep revalidating.');
+        $this->assertSame('Fresh', $third['name'] ?? null, 'The 304 serves from the re-memoized clean body.');
+    }
 }
