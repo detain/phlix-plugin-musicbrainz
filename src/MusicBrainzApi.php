@@ -49,6 +49,19 @@ final class MusicBrainzApi
     private const MAX_IMAGE_RESPONSE_BYTES = 10 * 1024 * 1024;
 
     /**
+     * Hard cap for one JSON response body — every lookup, search and
+     * Cover-Art-Archive listing that flows through requestCached() (MBS-3):
+     * 16 MiB. The image leg was byte-budgeted (M-MUSICBRAINZ-29) while the
+     * JSON leg buffered and json_decode()d whatever arrived, so a hostile or
+     * misbehaving endpoint could balloon a resident worker by sending one
+     * enormous body. The budget is deliberately generous — the largest
+     * legitimate replies (a many-disc release with `inc=recordings`) are a
+     * few MiB — so it only ever trips on pathological responses, and it
+     * rides the same transport `maxResponseBytes` fence the image law uses.
+     */
+    private const MAX_JSON_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+    /**
      * Maximum Location hops fetchImage() will walk for one cover image.
      * Matches the transport's previous auto-follow budget (3) so legit CAA
      * redirect chains keep working while a cycling/unbounded chain is
@@ -373,6 +386,12 @@ final class MusicBrainzApi
      * Both stores are process-wide (bounded, FIFO) so every plugin instance
      * shares one MusicBrainz budget. Rate-limit observation happens here too.
      *
+     * Every exchange through this funnel carries the MAX_JSON_RESPONSE_BYTES
+     * transport budget (MBS-3, mirroring the image-budget law): a size abort
+     * is refused and logged once, and a body that arrives over the budget
+     * anyway (a transport that ignored the option) is refused by the same
+     * belt before it can be decoded or memoized.
+     *
      * @param array<string, string> $headers
      * @param array<string, mixed> $query
      */
@@ -394,8 +413,35 @@ final class MusicBrainzApi
             $conditionalHeaders['If-None-Match'] = $stored['etag'];
         }
 
-        $response = $this->requestWithLimiting($url, $conditionalHeaders, $query);
+        $response = $this->requestWithLimiting(
+            $url,
+            $conditionalHeaders,
+            $query,
+            ['maxResponseBytes' => self::MAX_JSON_RESPONSE_BYTES]
+        );
         $this->observeRateSignals($response);
+
+        if ($response->isTooLarge()) {
+            $this->logger->warning('MusicBrainz: refused oversized JSON response (transport size abort)', [
+                'target' => self::logSafe($url),
+                'cap' => self::MAX_JSON_RESPONSE_BYTES,
+            ]);
+
+            return $response;
+        }
+
+        // MBS-3 belt: the transport already enforces the budget; this covers
+        // transports that deliver an over-budget body anyway. Refused BEFORE
+        // the ETag memo and before any caller json_decode()s it.
+        if ($response->body !== null && strlen($response->body) > self::MAX_JSON_RESPONSE_BYTES) {
+            $this->logger->warning('MusicBrainz: refused oversized JSON body (delivered over budget)', [
+                'target' => self::logSafe($url),
+                'bytes' => strlen($response->body),
+                'cap' => self::MAX_JSON_RESPONSE_BYTES,
+            ]);
+
+            return HttpResponse::contentTooLarge();
+        }
 
         if ($response->notModified() && $stored !== null) {
             return new HttpResponse(200, $stored['body'], $stored['headers']);

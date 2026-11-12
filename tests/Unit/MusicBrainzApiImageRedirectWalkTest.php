@@ -221,7 +221,14 @@ final class MusicBrainzApiImageRedirectWalkTest extends TestCase
         $imageDials = [];
         foreach ($harness->client->dials as $dial) {
             if ($dial['url'] === self::LISTING) {
-                $this->assertSame([], $dial['options'], 'The listing leg is from the API docs, not remote data.');
+                // The listing is a JSON leg: no redirect fence (its URL is
+                // from the API docs, not remote data) but the MBS-3 JSON
+                // byte budget every requestCached() exchange carries.
+                $this->assertSame(
+                    ['maxResponseBytes' => 16777216],
+                    $dial['options'],
+                    'The listing leg carries the JSON byte budget and nothing else.'
+                );
 
                 continue;
             }
