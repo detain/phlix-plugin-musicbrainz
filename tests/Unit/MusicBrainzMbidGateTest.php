@@ -90,7 +90,7 @@ final class MusicBrainzMbidGateTest extends TestCase
     /**
      * MBS-5: junk keys must never touch the cover memo. Pre-gate, a
      * malformed id resolved to null downstream (getCoverArt() refused it)
-     * and that null was then memoized under the raw key — five junk ids
+     * and that null was then memoized under the raw key — four junk ids
      * were enough to evict real art from the 4-slot FIFO.
      */
     public function testMalformedMbidsCannotChurnTheCoverMemo(): void

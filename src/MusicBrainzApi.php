@@ -574,7 +574,7 @@ final class MusicBrainzApi
      *   (M-MUSICBRAINZ-04); transport/JSON failures are logged, plain HTTP
      *   failures are not distinguishable here.
      *
-     * @since 0.4.1 the default include vocabulary is live-verified: ws/2
+     * @since 0.4.0 the default include vocabulary is live-verified: ws/2
      * rejects `genre` (singular) with HTTP 400 "genre is not a valid inc
      * parameter for the artist resource." — the plural `genres` is the only
      * spelling that answers, and the singular default silently zeroed every
