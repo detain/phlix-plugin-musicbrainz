@@ -104,12 +104,12 @@ final class MusicBrainzSettings
             : self::DEFAULT_USER_AGENT;
 
         return new self(
-            // M-MUSICBRAINZ-37: the master switch parses, never casts. A
+            // M-MUSICBRAINZ-37: every boolean parses, never casts. A
             // (bool) cast maps ANY non-empty string — including a
-            // serialized 'false' — to true, switching the whole plugin on
-            // from junk input. The permissive sub-behavior defaults below
-            // stay cast-scoped because `enabled` gates everything they
-            // touch; the entry point itself is fail-closed.
+            // serialized 'false' — to true. `enabled` is fail-closed
+            // (default false); auto_enrich / fetch_album_art keep their
+            // permissive default true when the value is absent or junk,
+            // but a legacy 'false' string no longer truthifies.
             enabled: self::parseStrictBool($data['enabled'] ?? null, false),
             userAgent: $userAgent,
             // M-MUSICBRAINZ-39: bounded on BOTH sides at this single parse
@@ -123,8 +123,8 @@ final class MusicBrainzSettings
                     max(self::MIN_RATE_LIMIT_DELAY_MS, $data['rate_limit_delay'])
                 )
                 : 1100,
-            autoEnrich: (bool)($data['auto_enrich'] ?? true),
-            fetchAlbumArt: (bool)($data['fetch_album_art'] ?? true),
+            autoEnrich: self::parseStrictBool($data['auto_enrich'] ?? null, true),
+            fetchAlbumArt: self::parseStrictBool($data['fetch_album_art'] ?? null, true),
             searchDepth: is_string($data['search_depth'] ?? null)
                 && in_array($data['search_depth'], ['fast', 'normal', 'deep'], true)
                 ? $data['search_depth']

@@ -237,4 +237,19 @@ final class MusicBrainzSettingsTest extends TestCase
         $this->assertFalse(MusicBrainzSettings::fromArray(['enabled' => null])->enabled);
         $this->assertFalse(MusicBrainzSettings::fromArray([])->enabled, 'Missing stays default-off.');
     }
+
+    public function testSubBooleansAreParsedStrictlyWithDefaults(): void
+    {
+        foreach (['auto_enrich' => 'autoEnrich', 'fetch_album_art' => 'fetchAlbumArt'] as $key => $prop) {
+            $this->assertTrue(MusicBrainzSettings::fromArray([])->$prop, 'Missing keeps default true.');
+            $this->assertFalse(MusicBrainzSettings::fromArray([$key => false])->$prop);
+            $this->assertFalse(MusicBrainzSettings::fromArray([$key => 0])->$prop);
+            $this->assertTrue(MusicBrainzSettings::fromArray([$key => 1])->$prop);
+            $this->assertTrue(
+                MusicBrainzSettings::fromArray([$key => 'false'])->$prop,
+                'Legacy "false" string is junk: falls to default, never cast-truthified by accident of shape.'
+            );
+            $this->assertTrue(MusicBrainzSettings::fromArray([$key => null])->$prop);
+        }
+    }
 }
