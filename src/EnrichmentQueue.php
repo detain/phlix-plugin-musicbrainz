@@ -148,6 +148,22 @@ final class EnrichmentQueue
     }
 
     /**
+     * Whether the queue is at its hard cap (new distinct items are refused).
+     */
+    public function isFull(): bool
+    {
+        return count($this->queue) >= $this->maxSize;
+    }
+
+    /**
+     * Configured hard cap on queued items.
+     */
+    public function maxSize(): int
+    {
+        return $this->maxSize;
+    }
+
+    /**
      * Whether the queue is empty.
      */
     public function isEmpty(): bool

@@ -78,6 +78,10 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
     private bool $enabled = false;
     private bool $drainTimerStarted = false;
     private ?int $drainTimerId = null;
+    /** MBS-10: one-time warning latch for the queue-cap refusal. */
+    private bool $queueFullWarned = false;
+    /** MBS-21: one-time warning latch for the isConfigured() decline. */
+    private bool $declineWarned = false;
 
     /**
      * @param MusicBrainzSettings|null $settings Initial settings (loaded from DB on enable)
@@ -111,6 +115,9 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         // split vote for any truthy non-bool (e.g. 1) — the plugin stayed
         // dead while the admin UI showed it enabled.
         $this->enabled = $this->settings->enabled;
+        // A fresh configuration may fix (or re-break) the gate: re-arm the
+        // one-time decline warning so the operator hears about the new state.
+        $this->declineWarned = false;
 
         // M-MUSICBRAINZ-25: a settings save rebuilds the throttle/spacing,
         // but the pending backlog is USER work — dropping it meant every
@@ -213,12 +220,33 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
      */
     public function onMediaItemAdded(MediaItemAdded $event): void
     {
-        if (!$this->isConfigured() || !$this->settings->autoEnrich) {
+        if (!in_array($event->type, self::MUSIC_TYPES, true)) {
             return;
         }
 
-        if (!in_array($event->type, self::MUSIC_TYPES, true)) {
+        if (!$this->isConfigured()) {
+            // MBS-21: speak the silence, once, so a missing/invalid
+            // user_agent does not read as "plugin working, found nothing".
+            if (!$this->declineWarned) {
+                $this->declineWarned = true;
+                $this->logger->warning(
+                    'MusicBrainz: enrichment skipped; plugin is not configured (needs enabled and a user_agent containing a contact URL). Further skips are not logged.'
+                );
+            }
+
             return;
+        }
+
+        if (!$this->settings->autoEnrich) {
+            return;
+        }
+
+        if ($this->queue->isFull() && !$this->queueFullWarned) {
+            // MBS-10: the cap refusal was silent; warn once per plugin lifetime.
+            $this->queueFullWarned = true;
+            $this->logger->warning('MusicBrainz: enrichment queue is full; new items are dropped until it drains. Further drops are not logged.', [
+                'max_size' => $this->queue->maxSize(),
+            ]);
         }
 
         if ($this->queue->enqueue($event->mediaItemId)) {
