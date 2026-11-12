@@ -115,6 +115,75 @@ final class MetadataEnricherQuerySafetyTest extends TestCase
         $this->assertStringNotContainsString('isrc:', $queries[0]);
     }
 
+    /**
+     * Well-formed compact ISO 3901 ISRCs (CC-XXX-YY-NNNNN): 2-letter country
+     * code, 3-alnum registrant code, 2-digit year, 5-digit designation.
+     * USABC1234567 is US / ABC / 12 / 34567 — a valid ISRC under ISO 3901,
+     * so it must be accepted, not refused.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function validIsrcProvider(): array
+    {
+        return [
+            'canonical ISO example'     => ['USRC17607839'],
+            'all-letter registrant'     => ['USABC1234567'],
+            'GB, alpha registrant'      => ['GBAYE0601498'],
+            'numeric registrant'        => ['FR1230012345'],
+            'mixed-alnum registrant'    => ['QZ9A12400001'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('validIsrcProvider')]
+    public function testWellFormedIsrcIsAccepted(string $isrc): void
+    {
+        $queries = [];
+        $enricher = $this->enricherCapturingQueries($queries);
+
+        $enricher->enrich('Some Song', null, null, null, $isrc);
+
+        $this->assertNotEmpty($queries);
+        $this->assertSame('isrc:' . $isrc, $queries[0]);
+    }
+
+    /**
+     * Anything off the ISRC grammar must degrade to the quoted phrase —
+     * wrong length, wrong segment class, lowercase, hyphenated display form,
+     * and (the anchoring leg) a trailing newline that PCRE's `$` would
+     * otherwise have let through into the query.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function invalidIsrcProvider(): array
+    {
+        return [
+            'trailing newline'          => ["USRC17607839\n"],
+            'leading newline'           => ["\nUSRC17607839"],
+            'too short (11)'            => ['USRC1760783'],
+            'too long (13)'             => ['USRC176078390'],
+            'digit in country code'     => ['U1RC17607839'],
+            'letter in year'            => ['USRC1A607839'],
+            'letter in designation'     => ['USRC1760783X'],
+            'lowercase'                 => ['usrc17607839'],
+            'hyphenated display form'   => ['US-RC1-76-07839'],
+            'space-separated'           => ['US RC1 76 07839'],
+            'empty'                     => [''],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidIsrcProvider')]
+    public function testMalformedIsrcIsRefused(string $isrc): void
+    {
+        $queries = [];
+        $enricher = $this->enricherCapturingQueries($queries);
+
+        $enricher->enrich('Some Song', null, null, null, $isrc);
+
+        $this->assertNotEmpty($queries);
+        $this->assertStringStartsWith('"Some Song"', $queries[0]);
+        $this->assertStringNotContainsString('isrc:', $queries[0]);
+    }
+
     public function testReleaseSearchFallbackQuotesBothTerms(): void
     {
         $queries = [];

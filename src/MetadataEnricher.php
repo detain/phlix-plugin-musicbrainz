@@ -175,16 +175,32 @@ final class MetadataEnricher
     }
 
     /**
-     * True only for a syntactically valid 12-character ISRC
-     * (2-letter registrant, 3-char year+registrant-detail, 7-digit
-     * designation), e.g. USRC12345678. The charset is alphanumeric-
-     * uppercase/digits only, so such a value is inert inside a Lucene
-     * field term and can be passed through without quoting.
+     * Compact ISO 3901 ISRC grammar: CC (2 letters) + XXX (3 alnum
+     * registrant) + YY (2-digit year) + NNNNN (5-digit designation),
+     * anchored \A…\z so no trailing newline can slip past `$`.
+     */
+    private const ISRC_PATTERN = '/\A[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}\z/';
+
+    /**
+     * True only for a syntactically valid 12-character ISRC in its compact
+     * (unhyphenated) ISO 3901 form CC-XXX-YY-NNNNN:
+     *
+     *   - CC     2 uppercase letters  — country code (ISO 3166-1 alpha-2 / prefix)
+     *   - XXX    3 uppercase alnum    — registrant (first-owner) code
+     *   - YY     2 digits             — year of reference
+     *   - NNNNN  5 digits             — designation code
+     *
+     * e.g. USRC17607839 (US / RC1 / 76 / 07839). The pattern is anchored
+     * with \A…\z — not ^…$ — because PCRE's `$` also matches before a
+     * trailing "\n", which would otherwise let "USRC17607839\n" through and
+     * carry the newline into the query. The charset is uppercase letters and
+     * digits only, so a matching value is inert inside a Lucene field term
+     * and can be passed through without quoting.
      */
     private static function isValidIsrc(?string $isrc): bool
     {
         return is_string($isrc)
-            && preg_match('/^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$/', $isrc) === 1;
+            && preg_match(self::ISRC_PATTERN, $isrc) === 1;
     }
 
     /**
