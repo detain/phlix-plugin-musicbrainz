@@ -239,6 +239,66 @@ final class HttpClientAsyncWaitTest extends TestCase
     }
 
     /**
+     * MBS-13: one HttpClient instance builds the async transport once and
+     * reuses it across exchanges (keep-alive / TLS reuse), including across
+     * a redirect walk and after an abandoned exchange.
+     */
+    public function testAsyncClientIsMemoizedPerInstanceAcrossExchanges(): void
+    {
+        $client = $this->scriptClient('respond', $this->makeResponse(200, 'ok'));
+        $builds = 0;
+        $http = new HttpClient(
+            15,
+            static function (array $config) use ($client, &$builds): object {
+                $builds++;
+
+                return $client;
+            },
+            static function (int $microseconds): void {
+                unset($microseconds);
+            }
+        );
+
+        $http->get('https://musicbrainz.org/ws/2/artist/a');
+        $http->get('https://musicbrainz.org/ws/2/artist/b');
+
+        $this->assertSame(1, $builds, 'The factory must run once per instance, not per request.');
+        $this->assertCount(2, $client->dials, 'Both exchanges ride the one shared client.');
+    }
+
+    public function testSharedAsyncClientKeepsAbandonedExchangeInertAndNextExchangeClean(): void
+    {
+        $client = $this->scriptClient('hang');
+        $builds = 0;
+        $http = new HttpClient(
+            0,
+            static function (array $config) use ($client, &$builds): object {
+                $builds++;
+
+                return $client;
+            },
+            static function (int $microseconds): void {
+                unset($microseconds);
+            }
+        );
+
+        $first = $http->get('https://musicbrainz.org/ws/2/artist/a');
+        $this->assertNull($first->status);
+
+        // Late arrival on the abandoned exchange, through the shared client.
+        $late = $client->dials[0]['options']['success'];
+        $this->assertTrue(is_callable($late));
+        $late($this->makeResponse(200, 'late'));
+
+        // The next exchange on the same instance resolves from its own record.
+        $client->dials = [];
+        $second = $http->get('https://musicbrainz.org/ws/2/artist/b');
+        $this->assertNull($second->status, 'Still hanging: the late body never leaks into a later exchange.');
+        $this->assertSame(1, $builds);
+        $this->assertCount(1, $client->dials);
+    }
+
+    /**
      * M-MUSICBRAINZ-41: the async (production) transport used to hand the
      * URL straight to the host library with no check of its own — the
      * protocol lockdown existed only as curl options on the CLI/test

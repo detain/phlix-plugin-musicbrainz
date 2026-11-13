@@ -76,6 +76,18 @@ final class HttpClient implements HttpClientInterface
     private bool $allowLoopbackHttp;
 
     /**
+     * Memoized async transport client, keyed by timeout (MBS-13). The timeout
+     * is fixed per instance, so one client serves every exchange: keep-alive
+     * and TLS sessions are reused instead of rebuilding a client (and its
+     * connection pool) per request. Per-exchange state lives in the closure
+     * record, never on the client, so an abandoned exchange's late callbacks
+     * stay inert on the shared client.
+     *
+     * @var array<int, object>
+     */
+    private array $asyncClients = [];
+
+    /**
      * @param (callable(array<string, mixed>): object)|null $asyncClientFactory
      *   Test seam for the async transport; production passes nothing.
      * @param (callable(int): void)|null $asyncWaitSleeper
@@ -220,7 +232,7 @@ final class HttpClient implements HttpClientInterface
         ];
 
         /** @var \Workerman\Http\Client $client */
-        $client = ($this->asyncClientFactory)([
+        $client = $this->asyncClients[$this->timeout] ??= ($this->asyncClientFactory)([
             'timeout' => $this->timeout,
             // MBS-17: explicit TLS posture on the async transport too.
             'context' => [
