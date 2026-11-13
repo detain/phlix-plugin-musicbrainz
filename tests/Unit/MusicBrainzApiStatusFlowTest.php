@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
 use Phlix\Plugin\MusicBrainz\HttpResponse;
@@ -426,8 +427,9 @@ final class MusicBrainzApiStatusFlowTest extends TestCase
      * (no conditional header on the wire) AND dropped (the memo no longer
      * holds it, so a 304 can never be served from its body).
      *
-     * @dataProvider providePoisonedEtags
+     * @see self::providePoisonedEtags()
      */
+    #[DataProvider('providePoisonedEtags')]
     public function testPoisonedStoredEtagIsRejectedAndDroppedBeforeReplay(string $poisoned): void
     {
         $mbid = '14652a6d-3c79-cb58-72e1-29a99be739e4';

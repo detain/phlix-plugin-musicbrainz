@@ -338,7 +338,7 @@ final class MusicBrainzPluginEnrichmentTest extends TestCase
      */
     public function testDrainOneSurvivesEnrichmentThrowAndKeepsTheTimerAlive(): void
     {
-        $repo = $this->createMock(ItemRepository::class);
+        $repo = $this->createStub(ItemRepository::class);
         $repo->method('findById')->willThrowException(new \RuntimeException('DB exploded'));
 
         $plugin = $this->enabledPlugin();

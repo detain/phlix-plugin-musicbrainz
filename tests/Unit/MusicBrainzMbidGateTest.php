@@ -21,6 +21,7 @@ declare(strict_types=1);
 
 namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClientInterface;
 use Phlix\Plugin\MusicBrainz\HttpResponse;
@@ -74,8 +75,9 @@ final class MusicBrainzMbidGateTest extends TestCase
     }
 
     /**
-     * @dataProvider provideMalformedMbids
+     * @see self::provideMalformedMbids()
      */
+    #[DataProvider('provideMalformedMbids')]
     public function testEntityLookupsRefuseMalformedMbidWithoutDialing(string $mbid): void
     {
         $api = $this->refusingApi();

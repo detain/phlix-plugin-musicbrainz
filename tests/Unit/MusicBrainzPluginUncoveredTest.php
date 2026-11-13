@@ -44,7 +44,7 @@ final class MusicBrainzPluginUncoveredTest extends TestCase
         $property->setAccessible(true);
 
         // Create a mock ItemRepository
-        $mockRepo = $this->createMock(\Phlix\Media\Library\ItemRepository::class);
+        $mockRepo = $this->createStub(\Phlix\Media\Library\ItemRepository::class);
         $property->setValue($plugin, $mockRepo);
 
         // Call onDisable
@@ -225,7 +225,7 @@ final class MusicBrainzPluginUncoveredTest extends TestCase
         $property = $reflection->getProperty('itemRepository');
         $property->setAccessible(true);
 
-        $mockRepo = $this->createMock(\Phlix\Media\Library\ItemRepository::class);
+        $mockRepo = $this->createStub(\Phlix\Media\Library\ItemRepository::class);
         $mockRepo->method('findById')->willReturn([
             'id' => 'video-item',
             'name' => 'Test Video',
@@ -252,7 +252,7 @@ final class MusicBrainzPluginUncoveredTest extends TestCase
         $property = $reflection->getProperty('itemRepository');
         $property->setAccessible(true);
 
-        $mockRepo = $this->createMock(\Phlix\Media\Library\ItemRepository::class);
+        $mockRepo = $this->createStub(\Phlix\Media\Library\ItemRepository::class);
         $mockRepo->method('findById')->willReturn([
             'id' => 'empty-title-item',
             'name' => '',  // Empty title

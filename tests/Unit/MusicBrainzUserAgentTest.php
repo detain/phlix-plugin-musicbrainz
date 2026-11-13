@@ -20,6 +20,7 @@ declare(strict_types=1);
 
 namespace Phlix\Tests\Unit\Plugin\MusicBrainz;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Phlix\Plugin\MusicBrainz\HttpClient;
 use Phlix\Plugin\MusicBrainz\MusicBrainzApi;
@@ -196,8 +197,9 @@ final class MusicBrainzUserAgentTest extends TestCase
     }
 
     /**
-     * @dataProvider provideUnsafeUserAgents
+     * @see self::provideUnsafeUserAgents()
      */
+    #[DataProvider('provideUnsafeUserAgents')]
     public function testUnsafeUserAgentFallsBackToCanonicalConstant(string $unsafe): void
     {
         $this->assertSame(

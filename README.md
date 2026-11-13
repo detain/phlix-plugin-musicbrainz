@@ -68,6 +68,8 @@ vendor/bin/phpcs src --standard=PSR12
 php scripts/security-audit-check.php
 ```
 
+Dev toolchain: PHPUnit 12 (attribute-based `#[DataProvider]`; PHPUnit 13 needs PHP 8.4+, above the PHP 8.3 floor), PHPStan 2.3, PHP_CodeSniffer 4. CI runs PHP 8.3, 8.4 and 8.5.
+
 Requirements: PHP >= 8.3 with `ext-curl` (declared in `composer.json`) — curl
 is the documented CLI/test fallback transport only; inside the resident
 Workerman server process the plugin uses the host's `Workerman\Http\Client`
