@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1f6e57c09e72ef01bb1372c18d8006eb",
+    "content-hash": "a125b3adb1d218e02e44047f0c94b6c9",
     "packages": [
         {
             "name": "detain/phlix-shared",
@@ -2105,7 +2105,8 @@
     "prefer-lowest": false,
     "platform": {
         "php": ">=8.3",
-        "ext-curl": "*"
+        "ext-curl": "*",
+        "ext-mbstring": "*"
     },
     "platform-dev": {},
     "plugin-api-version": "2.9.0"

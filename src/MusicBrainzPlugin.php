@@ -243,22 +243,31 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             return;
         }
 
-        if ($this->queue->isFull() && !$this->queueFullWarned) {
-            // MBS-10: the cap refusal was silent; warn once per plugin lifetime.
-            $this->queueFullWarned = true;
-            $this->logger->warning(
-                'MusicBrainz: enrichment queue is full; new items are dropped until it drains. '
-                . 'Further drops are not logged.',
-                ['max_size' => $this->queue->maxSize()]
-            );
-        }
-
         if ($this->queue->enqueue($event->mediaItemId)) {
             $this->logger->debug('MusicBrainz: queued media item for enrichment', [
                 'media_item_id' => $event->mediaItemId,
                 'queue_size' => $this->queue->size(),
             ]);
             $this->ensureDrainTimerStarted();
+
+            return;
+        }
+
+        // MBS-10: the cap refusal was silent; warn once per plugin lifetime.
+        // Warn only when a genuinely new id was refused by a full queue; a
+        // duplicate of an already-pending id (or an empty id) drops nothing.
+        if (
+            !$this->queueFullWarned
+            && $event->mediaItemId !== ''
+            && $this->queue->isFull()
+            && !in_array($event->mediaItemId, $this->queue->pendingIds(), true)
+        ) {
+            $this->queueFullWarned = true;
+            $this->logger->warning(
+                'MusicBrainz: enrichment queue is full; new items are dropped until it drains. '
+                . 'Further drops are not logged.',
+                ['max_size' => $this->queue->maxSize()]
+            );
         }
     }
 

@@ -1049,6 +1049,18 @@ final class MusicBrainzApi
     }
 
     /**
+     * Replay gate for a memoized ETag (MBS-18): the same header-safety idiom
+     * the settings boundary applies to the User-Agent — no C0/C1 control or
+     * DEL characters, and malformed UTF-8 (a preg failure) counts as unsafe,
+     * because what cannot be decoded cannot be inspected and must not reach
+     * a transport header. An empty value is not replayable either.
+     */
+    private static function isReplayableEtag(string $etag): bool
+    {
+        return $etag !== '' && preg_match('/\p{Cc}/u', $etag) === 0;
+    }
+
+    /**
      * Parse an untrusted string for log context (M-MUSICBRAINZ-40): strip
      * Unicode control/format characters (C0/C1, DEL, zero-width and bidi
      * marks — the payload shapes that forge adjacent lines or spoof a sink
@@ -1062,18 +1074,6 @@ final class MusicBrainzApi
      * codepoint bound, so multi-byte payloads can no longer smuggle past a
      * byte-wise substr.
      */
-    /**
-     * Replay gate for a memoized ETag (MBS-18): the same header-safety idiom
-     * the settings boundary applies to the User-Agent — no C0/C1 control or
-     * DEL characters, and malformed UTF-8 (a preg failure) counts as unsafe,
-     * because what cannot be decoded cannot be inspected and must not reach
-     * a transport header. An empty value is not replayable either.
-     */
-    private static function isReplayableEtag(string $etag): bool
-    {
-        return $etag !== '' && preg_match('/\p{Cc}/u', $etag) === 0;
-    }
-
     private static function logSafe(string $value, int $cap = self::LOG_VALUE_MAX_CHARS): string
     {
         $scrubbed = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value);

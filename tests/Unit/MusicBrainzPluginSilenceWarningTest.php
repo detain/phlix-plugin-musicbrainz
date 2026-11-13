@@ -70,4 +70,25 @@ final class MusicBrainzPluginSilenceWarningTest extends TestCase
         $this->assertCount(1, $log->warnings);
         $this->assertStringContainsString('queue is full', $log->warnings[0]);
     }
+
+    public function testDuplicateAtFullQueueDoesNotWarn(): void
+    {
+        $log = $this->recorder();
+        $plugin = new MusicBrainzPlugin(null, $log);
+        $plugin->configure(['enabled' => true, 'user_agent' => 'T/1.0 (https://example.com/c)']);
+
+        $prop = new \ReflectionProperty($plugin, 'queue');
+        $prop->setAccessible(true);
+        $prop->setValue($plugin, new EnrichmentQueue(1.0, 2));
+
+        foreach (['a', 'b', 'a', 'b'] as $id) {
+            $plugin->onMediaItemAdded($this->event($id));
+        }
+
+        $this->assertSame(2, $plugin->queueSize());
+        $this->assertSame([], $log->warnings, 'duplicates dropped nothing, so no warning');
+
+        $plugin->onMediaItemAdded($this->event('c'));
+        $this->assertCount(1, $log->warnings);
+    }
 }
