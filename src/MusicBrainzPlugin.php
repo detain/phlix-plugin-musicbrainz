@@ -230,7 +230,9 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
             if (!$this->declineWarned) {
                 $this->declineWarned = true;
                 $this->logger->warning(
-                    'MusicBrainz: enrichment skipped; plugin is not configured (needs enabled and a user_agent containing a contact URL). Further skips are not logged.'
+                    'MusicBrainz: enrichment skipped; plugin is not configured '
+                    . '(needs enabled and a user_agent containing a contact URL). '
+                    . 'Further skips are not logged.'
                 );
             }
 
@@ -244,9 +246,11 @@ final class MusicBrainzPlugin implements LifecycleInterface, ConfigurableInterfa
         if ($this->queue->isFull() && !$this->queueFullWarned) {
             // MBS-10: the cap refusal was silent; warn once per plugin lifetime.
             $this->queueFullWarned = true;
-            $this->logger->warning('MusicBrainz: enrichment queue is full; new items are dropped until it drains. Further drops are not logged.', [
-                'max_size' => $this->queue->maxSize(),
-            ]);
+            $this->logger->warning(
+                'MusicBrainz: enrichment queue is full; new items are dropped until it drains. '
+                . 'Further drops are not logged.',
+                ['max_size' => $this->queue->maxSize()]
+            );
         }
 
         if ($this->queue->enqueue($event->mediaItemId)) {
